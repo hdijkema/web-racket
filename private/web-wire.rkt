@@ -14,19 +14,14 @@
            ww-set-icon
    )
 
+  (define current-win-release "
+
+  (define ww-thread #f);
   
-  (define-struct ww
-    (
-     [win #:auto #:mutable]
-     [process-handler #:auto #:mutable]
-     [cb-move #:auto #:mutable]
-     [cb-resize #:auto #:mutable]
-     
-     )
-    #:auto-value #f
-    )
-  
+
   (define (ww-start)
+    (if (eq? ww-thread #f)
+        (let ((cwd (current-directory)
     (let* ((cwd (current-directory))
            (bin (build-path cwd ".." "bin" "linux" "web-wire"))
            (ww  (make-ww))
