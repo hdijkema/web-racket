@@ -11,18 +11,68 @@
            json
            "../utils/utils.rkt"
            "css.rkt"
-           html-printer
            )
 
   (provide ww-start
            ww-stop
+           
            ww-set-debug
+           ww-debug
+           ww-error
+           ww-devtools
+
+           ww-cmd
+           ww-await
+
+           ww-set-stylesheet
+           ww-get-stylesheet
            
            ww-new
+           ww-close
+           
            ww-move
            ww-resize
            ww-set-title
            ww-set-icon
+
+           ww-set-menu
+
+           ww-set-html
+           ww-set-url
+           
+           ww-set-inner-html
+           ww-get-inner-html
+
+           ww-set-attr
+           ww-get-attr
+           ww-del-attr
+           
+           ww-set-style
+           ww-add-style
+           ww-get-style
+           
+           ww-add-class
+           ww-remove-class
+           ww-has-class?
+           
+           ww-set-value
+           ww-get-value
+
+           ww-set-show-state
+           ww-show-state
+
+           ww-bind
+           ww-on
+           ww-element-info
+
+           ww-file-open
+           ww-file-save
+           ww-choose-dir
+
+           windows
+           windows-evt-handlers
+
+           ww-from-string
    )
 
   (define current-win-release "https://github.com/hdijkema/web-wire/releases/download/0.1/web-wire-0.1-win64.zip")
@@ -107,7 +157,12 @@
           #f)))
 
   (define (as-string s)
-    (with-output-to-string (lambda () (write s))))
+    (let ((s* (format "~a" s)))
+      (with-output-to-string (lambda () (write s*)))))
+
+  (define (ww-from-string s)
+    (let ((s* (substring s 1 (- (string-length s) 1))))
+      (string-replace s* "\\\"" "\"")))
 
   (define (to-server-file html-file)
     (let* ((path (build-path html-file))
@@ -125,19 +180,22 @@
   (define ww-from-ww #f)
   (define ww-quit #f)
 
-  (define ww-debug #f)
+  (define _ww-debug #f)
   
-  (define (ww-set-debug yn) (set! ww-debug yn))
+  (define (ww-set-debug yn) (set! _ww-debug yn))
 
   (define (do-debug str . var)
-    (when ww-debug
+    (when _ww-debug
       (if (null? var)
           (displayln (format "Debug: ~a" str))
-          (displayln (format "Debug: ~a: ~a" var str))
+          (displayln (format "Debug: ~a: ~a" (car var) str))
           )))
 
-  (define (err str)
-    (displayln (format "Error: ~a" str)))
+  (define (err str . var)
+    (if (null? var)
+        (displayln (format "Error: ~a" str))
+        (displayln (format "Error: ~a: ~a" var str))
+        ))
 
   (define-syntax debug
     (syntax-rules ()
@@ -145,6 +203,22 @@
        (do-debug str))
       ((_ var str)
        (do-debug str 'var))
+      ))
+
+  (define-syntax ww-debug
+    (syntax-rules ()
+      ((_ str)
+       (do-debug str))
+      ((_ var str)
+       (do-debug str 'var))
+      ))
+
+  (define-syntax ww-error
+    (syntax-rules ()
+      ((_ str)
+       (err str))
+      ((_ var str)
+       (err str 'var))
       ))
   
   (define re-kind #px"([A-Z]+)[(]([0-9]+)[)][:]")
@@ -172,6 +246,7 @@
             handle))))
 
   (define (ww-start)
+    (ww-debug "ww-start called")
 
     (define protocol-version 0)
 
@@ -184,13 +259,13 @@
                    (evt (string->symbol str-evt))
                    (win-id (string->number (caddr m)))
                    (content (car (cddddr m)))
-                   (win* (hash-ref windows-evt-handlers win-id #f))
-                   (win (if (eq? win* #f) #f (weak-box-value win*)))
+                   (win (hash-ref windows-evt-handlers win-id #f))
                    )
               ;(debug content content)
               (unless (or (eq? evt 'closed) (eq? evt 'js-result))
                 (if (eq? win #f)
-                    (begin
+                    (unless (or (eq? evt 'show-event)
+                                (eq? evt 'hide-event))
                       (err (format "No such window ~a" win-id))
                       (err (format "Cannot handle event '~a " evt))
                       (err (format "input: ~a" line))
@@ -230,7 +305,9 @@
               (when (eq? evt 'closed)
                 (if (eq? win #f)
                     (err (format "No such window ~a, cannot close" win-id))
-                    (hash-remove! windows-evt-handlers win-id)))
+                    (begin
+                      (hash-remove! windows-evt-handlers win-id)
+                      (hash-remove! windows win-id))))
               ))
         ))
 
@@ -324,37 +401,52 @@
     (set! current-handle (+ current-handle 1))
     current-handle)
 
-  (define (ww-cmd cmd)
-    (if (eq? cmd 'quit)
-        (begin
-          (displayln "exit" ww-to-ww)
-          (flush-output ww-to-ww)
-          (set! ww-quit #t))
+  (define (do-cmd cmd)
+    (if (eq? ww-to-ww #f)
+        (ww-error
+         (format "Unexpected: (eq? ww-to-ww  #f), for command '~a'" cmd))
         (begin
           (displayln cmd ww-to-ww)
           (flush-output ww-to-ww))
         )
-    (let ((line-in (string-trim (read-line ww-from-ww))))
-      (let ((ok (string-prefix? line-in "OK("))
-            (nok (string-prefix? line-in "NOK("))
-            )
-        (let ((m (regexp-match re-kind line-in)))
-          (unless m
-            (error (format "Input not expected: ~a" line-in)))
-          (let* ((kind (cadr m))
-                 (lines (string->number (caddr m)))
-                 (result-str (substring line-in (string-length (car m))))
-                 (more-lines (- lines 1))
-                 )
-            ;(displayln result-str)
-            ;(displayln (format "~a ~a ~a" kind lines more-lines))
-            (while (> more-lines 0)
-                   (set! result-str (string-append
-                                     result-str "\n"
-                                     (string-trim (read-line ww-from-ww))))
-                   (set! more-lines (- more-lines 1)))
-            (cons ok result-str)
-            ))))
+    )
+      
+
+  (define (ww-cmd cmd)
+    (if (eq? cmd 'quit)
+        (begin
+          (do-cmd "exit")
+          (set! ww-quit #t))
+        (begin
+          (do-cmd cmd))
+        )
+    (if (eq? ww-from-ww #f)
+        (begin
+          (ww-error
+           (format "Unexpected: (eq? ww-from-ww #f), for command '~a" cmd))
+          (cons #f 'nil))
+        (let ((line-in (string-trim (read-line ww-from-ww))))
+          (let ((ok (string-prefix? line-in "OK("))
+                (nok (string-prefix? line-in "NOK("))
+                )
+            (let ((m (regexp-match re-kind line-in)))
+              (unless m
+                (error (format "Input not expected: ~a" line-in)))
+              (let* ((kind (cadr m))
+                     (lines (string->number (caddr m)))
+                     (result-str (substring line-in (string-length (car m))))
+                     (more-lines (- lines 1))
+                     )
+                ;(displayln result-str)
+                ;(displayln (format "~a ~a ~a" kind lines more-lines))
+                (while (> more-lines 0)
+                       (set! result-str (string-append
+                                         result-str "\n"
+                                         (string-trim (read-line ww-from-ww))))
+                       (set! more-lines (- more-lines 1)))
+                (cons ok result-str)
+                ))))
+        )
     )
 
   (define (ww-await handle cmd)
@@ -385,6 +477,7 @@
 
   ;; Stop the QtWebEngine
   (define (ww-stop)
+    (ww-debug "ww-stop called")
     (let ((win-ids (hash-keys windows-evt-handlers)))
       (for-each (λ (win-id)
                   (ww-close win-id))
@@ -392,6 +485,25 @@
     (let ((r (ww-cmd 'quit)))
       (car r)))
 
+  ;; Global stylesheet
+  (define (ww-set-stylesheet st)
+    (let* ((css (if (stylesheet? st)
+                    (stylesheet->string st)
+                    st))
+           (h (let ((h (make-hasheq)))
+                (hash-set! h 'css css)
+                h))
+           (json (jsexpr->string h))
+           (cmd (format "set-stylesheet ~a" json))
+           )
+      (ww-cmd cmd)))
+
+  (define (ww-get-stylesheet)
+    (let ((cmd (format "get-stylesheet")))
+      (let ((r (ww-cmd cmd)))
+        (displayln r)
+        #t)))
+  
   ;; Debug window
   (define (ww-devtools win-id)
     (let ((cmd (format "debug ~a" win-id)))
@@ -571,6 +683,12 @@
     )
 
 
+  ;; set url
+  (define (ww-set-url win-id url)
+    (let ((cmd (format "set-url ~a ~a ~a"
+                       win-id (new-handle) (as-string url))))
+      (ww-cmd cmd)))
+  
 
   ;; Set html of window
   (define (ww-set-html win-id html-file)
@@ -613,8 +731,9 @@
   ;; Set attribute of element in html
   (define (ww-set-attr win-id element-id attr val)
     (let* ((js-handle (new-handle))
-           (cmd (format "set-attr ~a ~a ~a ~a" win-id js-handle
-                        (as-string element-id) (as-string val))))
+           (cmd (format "set-attr ~a ~a ~a ~a ~a" win-id js-handle
+                        (as-string element-id) (as-string attr) (as-string val))))
+      (displayln cmd)
       (ww-cmd cmd)))
 
   ;; Get attribute value of element in html
@@ -627,8 +746,9 @@
   ;; Delete attribute of element
   (define (ww-del-attr win-id element-id attr)
     (let* ((js-handle (new-handle))
-           (cmd (format "del-attr ~a ~a ~a" win-id js-handle
-                        (as-string element-id))))
+           (cmd (format "del-attr ~a ~a ~a ~a" win-id js-handle
+                        (as-string element-id)
+                        (as-string attr))))
       (ww-cmd cmd)))
 
   ;; get value of an element
@@ -654,7 +774,25 @@
     (let* ((js-handle (new-handle))
            (cmd (format "bind ~a ~a ~a ~a" win-id js-handle
                        (as-string event) (as-string selector))))
-      (map string->symbol (ww-await js-handle cmd))))
+      (map (lambda (info)
+             (map string->symbol info))
+             (ww-await js-handle cmd))))
+
+  (define (ww-on win-id event id)
+    (let* ((js-handle (new-handle))
+           (cmd (format "on ~a ~a ~a ~a"
+                        win-id js-handle
+                        (as-string event)
+                        (as-string id))))
+      (ww-cmd cmd)))
+
+  ;; Element info
+  (define (ww-element-info win-id id)
+    (let* ((js-handle (new-handle))
+           (cmd (format "element-info ~a ~a ~a" win-id js-handle
+                        (as-string id))))
+      (ww-await js-handle cmd)))
+
 
   ;; Add a class to an element
   (define (ww-add-class win-id element-id class)
@@ -720,296 +858,48 @@
                        (as-string element-id)))
            )
       (string->css-style (ww-await js-handle cmd))))
-                      
+
+
+  ;; Show State
+  (define (ww-set-show-state win-id state)
+    (let ((cmd (format "set-show-state ~a ~a" win-id (as-string state))))
+      (ww-cmd cmd)))
+
+  (define (ww-show-state win-id)
+    (let ((cmd (format "show-state ~a" win-id)))
+      (ww-cmd cmd)))
+
+  ;; Files and directories
+  (define (ww-file-open win-id title dir file-filters)
+    (let ((cmd (format "file-open ~a ~a ~a ~a" win-id
+                       (as-string title)
+                       (as-string dir)
+                       (as-string file-filters))))
+      (ww-cmd cmd)))
+
+  (define (ww-file-save win-id title dir file-filters overwrite)
+    (let ((cmd (format "file-save ~a ~a ~a ~a ~a" win-id
+                       (as-string title)
+                       (as-string dir)
+                       (as-string file-filters)
+                       (if overwrite 1 0))))
+      (ww-cmd cmd)))
+
+  (define (ww-choose-dir win-id title dir)
+    (let ((cmd (format "choose-dir ~a ~a ~a" win-id
+                       (as-string title)
+                       (as-string dir))))
+      (ww-cmd cmd)))
+  
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   ;; Finalizing stuff
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  (define will (make-will-executor))
+  ;(define will (make-will-executor))
 
-  (define (register-finalizer obj proc)
-    (will-register will obj proc))
+  ;(define (ww-register-finalizer obj proc)
+  ;  (will-register will obj proc))
 
-  (void (thread (λ () (let loop () (will-execute will) (loop)))))
-
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; Regexes
- ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-  (define re-resize #px"([0-9]+)\\s+([0-9]+)")
-  (define re-move re-resize)
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; GUI classes
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-  (define _std_x 100)
-  (define _std_y 100)
-  (define _std_w 800)
-  (define _std_h 600)
-
-  (define (next-window-init-position)
-    (set! _std_x (+ _std_x 75))
-    (set! _std_y (+ _std_y 50))
-    (call-with-values
-     get-display-size
-     (lambda (w h)
-       (when (> (+ _std_y _std_h) h)
-         (set! _std_y 50))
-       (when (> (+ _std_x _std_w) w)
-         (set! _std_x 50))
-       )))
-
-  (define ww-element%
-    (class object%
-      (init-field [win-id #f] [id #f])
-      
-      (define/public (get-win-id)
-        win-id)
-
-      (define/public (get-id)
-        id)
-
-      (define/public (win)
-        (let ((w (hash-ref windows win-id #f)))
-          w))
-
-      (define connected-callbacks (make-hash))
-
-      (define/public (callback evt . args)
-        (let ((cb (hash-ref connected-callbacks evt #f)))
-          (unless (eq? cb #f)
-            (with-handlers ([exn:fail?
-                             (λ (e)
-                               (err (format "callback for ~a: ~a" evt e)))])
-              (apply cb args)))))
-
-      (define/public (connect evt func)
-        (hash-set! connected-callbacks evt func))
-
-      (define/public (disconnect evt)
-        (hash-remove! connected-callbacks evt))
-
-      (define/public (add-style! st)
-        (ww-add-style win-id id st))
-
-      (define/public (set-style! st)
-        (ww-set-style win-id id st))
-
-      (define/public (style)
-        (ww-get-style win-id id))
-
-      (define/public (add-class! cl)
-        (ww-add-class win-id id cl))
-
-      (define/public (remove-class! cl)
-        (ww-remove-class win-id id cl))
-
-      (define/public (has-class? cl)
-        (ww-has-class? win-id id cl))
-
-      (define/public (enable)
-        (send this remove-class! 'disabled))
-
-      (define/public (enabled?)
-        (not (send this disabled?)))
-
-      (define/public (disable)
-        (send this add-class! 'disabled))
-
-      (define/public (disabled?)
-        (send this has-class? 'disabled))
-
-      (define/public (display . args)
-        (let ((d (if (null? args) "block" (car args))))
-          (send this add-style! (css-style 'display d))))
-
-      (define/public (hide)
-        (send this display "none"))
-
-      (define/public (show)
-        (send this display "block"))
-
-      (define/public (show-inline)
-        (send this display "inline-block"))
-
-      (define/public (set-inner-html html-or-sexpr)
-        (if (string? html-or-sexpr)
-            (ww-set-inner-html win-id id html-or-sexpr)
-            (set-inner-html (xexpr->html5 html-or-sexpr))))
-
-      (super-new)
-      )
-    )
-
-  (define ww-input%
-    (class ww-element%
-
-      (define/public (get)
-        (ww-get-value (send this get-win-id) (send this get-id)))
-
-      (define/public (set! v)
-        (ww-set-value (send this get-win-id) (send this get-id) v))
-          
-      (super-new)))
-
-  (define ww-window%
-    (class object%
-      
-      (init-field [profile 'default-profile]
-                  [parent-id #f]
-                  [title "Racket HTML Window"]
-                  [x _std_x]
-                  [y _std_y]
-                  [width _std_w]
-                  [height _std_h]
-                  [icon #f]
-                  [menu #f]
-                  [html-file #f]
-                  )
-
-      (define win-id #f)
-      
-      (define elements (make-hash))
-      
-      (define (event-handler type evt content)
-        (displayln (format "win-id=~a '~a '~a ~a" win-id type evt content))
-        (cond
-          ([eq? evt 'page-loaded] (begin
-                                    (send this bind-buttons)
-                                    (send this bind-inputs)))
-          ([eq? evt 'click] (handle-click (car content) (cadr content)))
-          ([eq? evt 'change] (handle-change (car content) (cadr content)))
-          ([eq? evt 'resized] (let* ((m (regexp-match re-resize content))
-                                     (width* (string->number (cadr m)))
-                                     (height* (string->number (caddr m)))
-                                     )
-                                (set! width width*)
-                                (set! height height*)))
-          ([eq? evt 'moved] (let* ((m (regexp-match re-move content))
-                                   (x* (string->number (cadr m)))
-                                   (y* (string->number (caddr m)))
-                                   )
-                              (set! x x*)
-                              (set! y y*)
-                              ))
-          )
-        )
-
-      (define/public (handle-click element-id data)
-        (let ((el (hash-ref elements element-id #f)))
-          (unless (eq? el #f)
-            (send el callback 'click data))))
-
-      (define/public (handle-change element-id data)
-        (let ((el (hash-ref elements element-id #f)))
-          (unless (eq? el #f)
-            (send el callback 'change (hash-ref data 'value)))))
-
-      (define/public (get-win-id) win-id)
-
-      (define/public (bind event selector cl)
-        (let ((ids (ww-bind win-id event selector)))
-          (for-each (λ (id)
-                      (hash-set! elements id
-                                 (new cl [win-id win-id] [id id])))
-                    ids)))
-
-      (define/public (bind-inputs)
-        (bind 'change 'input ww-input%)
-        (bind 'change 'textarea ww-input%)
-        )
-
-      (define/public (bind-buttons)
-        (bind 'click 'button ww-element%)
-        )
-
-      (define/public (element id)
-        (let ((el (hash-ref elements id #f)))
-          (if (eq? el #f)
-              (begin
-                (hash-set! elements id (new ww-element%
-                                            [win-id win-id] [id id]))
-                (element id))
-              el)))
-
-      (define/public (move x y)
-        (ww-move win-id x y))
-
-      (define/public (resize x y)
-        (ww-resize win-id x y))
-
-      (define/public (get-x) x)
-      (define/public (get-y) y)
-      (define/public (get-width) width)
-      (define/public (get-height) height)
-      (define/public (geom) (list x y width height))
-      
-
-      (define/public (set-title! t)
-        (set! title t)
-        (ww-set-title win-id t))
-
-      (define/public (get-title)
-        title)
-
-      (define/public (set-html-file! file)
-        (set! html-file file)
-        (ww-set-html win-id html-file))
-
-      (define/public (get-html-file)
-        html-file)
-
-      ; construct
-      (begin
-        ;(displayln (format "profile: ~a, ~a" profile parent-id))
-        (next-window-init-position)
-        
-        (set! win-id (ww-new profile parent-id))
-        (when (eq? win-id #f)
-          (error "Window could not be constructed"))
-
-        (hash-set! windows-evt-handlers win-id (make-weak-box event-handler))
-        (hash-set! windows win-id (make-weak-box this))
-
-        (ww-move win-id x y)
-        (ww-resize win-id width height)
-        
-        (ww-set-title win-id title)
-        
-        (unless (eq? icon #f)
-          (ww-set-icon win-id icon))
-        
-        (unless (eq? menu #f)
-          (ww-set-menu win-id menu))
-        
-        (unless (eq? html-file #f)
-          (ww-set-html win-id html-file))
-
-        (register-finalizer this
-                            (λ (me)
-                              (let ((win-id (send me get-win-id)))
-                                (ww-close (send me get-win-id))
-                                (hash-remove! windows win-id)
-                                (hash-remove! windows-evt-handlers win-id)
-                                )))
-        )
-
-      (super-new)
-    ))
-
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; Testing stuff
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-  (define test-menu
-    '(("File" (("Open" open) ("Close" close) ("Quit" quit)))
-      ("Edit" (("Copy" copy) ("Advanced" (("Copy 1" copy1) ("Copy 2" copy2)))
-                              ("Cut" cut) ("Paste" paste)))
-      ))
-
-  (define test-window%
-    (class ww-window%
-      (super-new [html-file "../../web-wire/test/test1.html"])))
-
+  ;(void (thread (λ () (let loop () (will-execute will) (loop)))))
   
   ); end of module
