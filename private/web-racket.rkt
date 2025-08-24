@@ -27,7 +27,7 @@
   (define re-move re-resize)
   (define re-file-open #px"([0-9]+)[:]([^:]+)[:](.*)")
   (define re-choose-dir re-file-open)
-  (define re-navigate #px"(.*)[:]([^:]+)$")
+  (define re-navigate #px"(.*)[:]([^:]+)[:]([^:]+)$")
   
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   ;; GUI classes
@@ -88,6 +88,18 @@
 
       (define/public (style)
         (ww-get-style win-id id))
+
+      (define/public (get-attr a)
+        (ww-get-attr win-id id a))
+
+      (define/public (set-attr! a val)
+        (ww-set-attr win-id id a val))
+
+      (define/public (del-attr a)
+        (ww-del-attr win-id id a))
+
+      (define/public (get-attrs)
+        (ww-get-attrs win-id id))
 
       (define/public (add-class! cl)
         (ww-add-class win-id id cl))
@@ -166,6 +178,7 @@
       
       (init-field [profile 'default-profile]
                   [parent-id #f]
+                  [parent #f]
                   [title "Racket HTML Window"]
                   [x _std_x]
                   [y _std_y]
@@ -182,11 +195,9 @@
       (define elements (make-hash))
       
       (define (event-handler type evt content)
-        (displayln (format "win-id=~a '~a '~a ~a" win-id type evt content))
+        (ww-debug (format "win-id=~a '~a '~a ~a" win-id type evt content))
         (cond
-          ([eq? evt 'page-loaded] (begin
-                                    (send this bind-buttons)
-                                    (send this bind-inputs)))
+          ([eq? evt 'page-loaded] (send this html-loaded))
           ([eq? evt 'click] (handle-click (car content) (cadr content)))
           ([eq? evt 'change] (handle-change (car content) (cadr content)))
           ([eq? evt 'resized] (let* ((m (regexp-match re-resize content))
@@ -209,9 +220,11 @@
                                           (unless (eq? cb #f)
                                             (cb))))
           ([eq? evt 'navigate] (let* ((m (regexp-match re-navigate content))
-                                     (url (ww-from-string (cadr m)))
-                                     (type (string->symbol (caddr m))))
-                                (send this handle-navigate url type)))
+                                      (url (ww-from-string (cadr m)))
+                                      (type (string->symbol (caddr m)))
+                                      (kind (string->symbol (cadddr m)))
+                                      )
+                                (send this handle-navigate url type kind)))
           )
         )
 
@@ -225,12 +238,15 @@
           (unless (eq? el #f)
             (send el callback 'change (hash-ref data 'value)))))
 
-      (define/public (handle-navigate url type)
-        (cond
-          ([eq? type 'link-clicked]
-           (send this set-url url))
-          (else (ww-error (format "Don't know what to do for ~a - ~a" type url)))
-          ))
+      (define/public (handle-navigate url type kind)
+        (let ((method (if (eq? kind 'set-html) 'set-html-file! 'set-url)))
+          (cond
+            ([eq? type 'link-clicked]
+             (dynamic-send this method url))
+            (else (ww-error (format "Don't know what to do for ~a - ~a" type url)))
+            )
+          )
+        )
 
       (define/public (get-win-id) win-id)
 
@@ -249,7 +265,7 @@
                       (let* ((id (car info))
                              (tag (cadr info))
                              (type (caddr info)))
-                        (displayln (format "bind: ~a ~a ~a" id tag type))
+                        (ww-debug (format "bind: ~a ~a ~a" id tag type))
                         (let ((cl (if (null? forced-cl)
                                       (cl-selector tag type)
                                       (car forced-cl))))
@@ -267,10 +283,10 @@
         )
 
       (define/public (element id)
-        (let ((el (hash-ref elements id #f)))
-          (if (eq? el #f)
+        (let ((el (hash-ref elements id 'no-element-with-id-in-hash)))
+          (if (eq? el 'no-element-with-id-in-hash)
               (let ((info (ww-element-info win-id id)))
-                (let* ((id (car info))
+                (let* ((el-id (car info))
                        (tag (cadr info))
                        (type (caddr info))
                        (exist (cadddr info))
@@ -279,9 +295,13 @@
                     (ww-debug (format "Element ~a does not exist!" id)))
                   (let* ((cl (cl-selector tag type))
                          (obj (new cl [win-id win-id] [id id])))
-                    (hash-set! elements id obj)))
+                    (hash-set! elements el-id obj)
+                    ))
                 (element id))
               el)))
+
+      (define/public (get-elements selector)
+        (ww-get-elements win-id selector))
 
       (define/public (move x y)
         (ww-move win-id x y))
@@ -294,7 +314,6 @@
       (define/public (get-width) width)
       (define/public (get-height) height)
       (define/public (geom) (list x y width height))
-      
 
       (define/public (set-title! t)
         (set! title t)
@@ -309,6 +328,10 @@
 
       (define/public (set-url url)
         (ww-set-url win-id url))
+
+      (define/public (html-loaded)
+        (send this bind-buttons)
+        (send this bind-inputs))
 
       (define/public (get-html-file)
         html-file)
@@ -403,6 +426,14 @@
       (begin
         (when (= (hash-count windows) 0)
           (ww-start))
+
+        (when (eq? parent-id #f)
+          (unless (eq? parent #f)
+            (set! parent-id (send parent get-win-id))))
+
+        (when (eq? parent #f)
+          (unless (eq? parent-id #f)
+            (set! parent (ww-get-window-for-id parent-id))))
         
         (next-window-init-position)
         
@@ -449,14 +480,35 @@
                               ("Cut" cut) ("Paste" paste)))
       ))
 
+  (define test-dialog%
+    (class ww-window%
+      (super-new [html-file "../../web-wire/test/dialog.html"]
+                 [width 400]
+                 [height 300])
+
+      (define/override (html-loaded)
+        (super html-loaded)
+        (let* ((btn (send this element 'ok-btn)))
+          (send btn connect 'click (λ (data)
+                                     (send this close)))))
+      ))
+
   (define test-window%
     (class ww-window%
       (super-new [html-file "../../web-wire/test/test1.html"])
+
+      (define/override (html-loaded)
+        (super html-loaded)
+        (let* ((btn (send this element 'app-button)))
+          (send btn connect  'click (λ (data)
+                                (new test-dialog% [parent this]))))
+          )
 
       (begin
         (send this set-menu test-menu)
         (send this connect-menu 'quit (λ () (send this close)))
         )
-      ))
-
+      )
+    )
+    
   ); end of module

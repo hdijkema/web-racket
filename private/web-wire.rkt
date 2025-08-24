@@ -45,6 +45,7 @@
 
            ww-set-attr
            ww-get-attr
+           ww-get-attrs
            ww-del-attr
            
            ww-set-style
@@ -57,6 +58,8 @@
            
            ww-set-value
            ww-get-value
+
+           ww-get-elements
 
            ww-set-show-state
            ww-show-state
@@ -71,6 +74,7 @@
 
            windows
            windows-evt-handlers
+           ww-get-window-for-id
 
            ww-from-string
    )
@@ -230,6 +234,9 @@
   (define windows-evt-handlers (make-hash))
   (define windows (make-hash))
 
+  (define (ww-get-window-for-id win-id)
+    (hash-ref windows win-id #f))
+
   (define handle-results (make-hash))
   (define handle-semaphores (make-hash))
 
@@ -326,7 +333,10 @@
                         (more-lines (- lines 1))
                         )
                    (while (> more-lines 0)
-                       (let ((line (string-trim (read-line err-ww))))
+                       (let* ((line* (read-line err-ww))
+                              (line (if (eof-object? line*)
+                                        ""
+                                        (string-trim line*))))
                          (set! rest (string-append rest "\n" line))
                          (set! more-lines (- more-lines 1))
                          ))
@@ -425,13 +435,18 @@
           (ww-error
            (format "Unexpected: (eq? ww-from-ww #f), for command '~a" cmd))
           (cons #f 'nil))
-        (let ((line-in (string-trim (read-line ww-from-ww))))
+        (let* ((line-in* (read-line ww-from-ww))
+               (line-in (if (eof-object? line-in*)
+                            "NOK(1):eof:0"
+                            (string-trim line-in*)))
+               )
           (let ((ok (string-prefix? line-in "OK("))
-                (nok (string-prefix? line-in "NOK("))
+                (nok (or (string=? line-in "")
+                         (string-prefix? line-in "NOK(")))
                 )
             (let ((m (regexp-match re-kind line-in)))
               (unless m
-                (error (format "Input not expected: ~a" line-in)))
+                (ww-debug (format "Input not expected: \"~a\", maybe ww-quit issued" line-in)))
               (let* ((kind (cadr m))
                      (lines (string->number (caddr m)))
                      (result-str (substring line-in (string-length (car m))))
@@ -439,11 +454,17 @@
                      )
                 ;(displayln result-str)
                 ;(displayln (format "~a ~a ~a" kind lines more-lines))
-                (while (> more-lines 0)
-                       (set! result-str (string-append
-                                         result-str "\n"
-                                         (string-trim (read-line ww-from-ww))))
-                       (set! more-lines (- more-lines 1)))
+                (let ((rdln (λ ()
+                              (let ((l (read-line ww-from-ww)))
+                                (if (eof-object? l)
+                                    ""
+                                    (string-trim l))))))
+                  (while (> more-lines 0)
+                         (set! result-str (string-append
+                                           result-str "\n"
+                                           (rdln)))
+                         (set! more-lines (- more-lines 1)))
+                  )
                 (cons ok result-str)
                 ))))
         )
@@ -743,6 +764,35 @@
                         (as-string element-id) (as-string attr))))
       (ww-await js-handle cmd)))
 
+  
+  ;; Get all attributes of an element with given id
+  (define (mk-attrs _attrs)
+      (let* ((attrs (make-hash)))
+        (for-each (λ (attr-val)
+                    (hash-set! attrs
+                               (string->symbol (car attr-val))
+                               (cadr attr-val)))
+                  _attrs)
+        attrs)
+    )
+  
+  (define (ww-get-attrs win-id element-id)
+    (let* ((js-handle (new-handle))
+           (cmd (format "get-attrs ~a ~a ~a" win-id js-handle
+                        (as-string element-id))))
+      (mk-attrs (ww-await js-handle cmd))))
+
+  ;; Get info of all elements for a selector
+  (define (ww-get-elements win-id selector)
+    (let* ((js-handle (new-handle))
+           (cmd (format "get-elements ~a ~a ~a" win-id js-handle
+                        (as-string selector))))
+      (map (λ (item)
+             (cons (string->symbol (car item))
+                   (mk-attrs (cadr item)))
+             )
+           (ww-await js-handle cmd))))
+
   ;; Delete attribute of element
   (define (ww-del-attr win-id element-id attr)
     (let* ((js-handle (new-handle))
@@ -791,8 +841,13 @@
     (let* ((js-handle (new-handle))
            (cmd (format "element-info ~a ~a ~a" win-id js-handle
                         (as-string id))))
-      (ww-await js-handle cmd)))
-
+      (let ((result (ww-await js-handle cmd)))
+        (list (if (symbol? id)
+                  (string->symbol (car result))
+                  (car result))
+              (string->symbol (cadr result))
+              (string->symbol (caddr result))
+              (cadddr result)))))
 
   ;; Add a class to an element
   (define (ww-add-class win-id element-id class)
