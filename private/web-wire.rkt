@@ -15,6 +15,7 @@
 
   (provide ww-start
            ww-stop
+           ww-set-web-wire-location!
            
            ww-set-debug
            ww-debug
@@ -80,6 +81,11 @@
    )
 
   (define current-win-release "https://github.com/hdijkema/web-wire/releases/download/0.1/web-wire-0.1-win64.zip")
+  (define user-web-wire-location #f)
+
+  (define (ww-set-web-wire-location! path-or-dir)
+    (set! user-web-wire-location (build-path path-or-dir))
+    user-web-wire-location)
 
   (define (os)
     (format "~a-~a" (system-type) (system-type 'word)))
@@ -90,9 +96,22 @@
         "web-wire"))
 
   (define (web-wire-dir)
-    (let* ((cache-dir (find-system-path 'cache-dir))
-           (os-dir (build-path cache-dir (os))))
-      os-dir))
+    (if (eq? user-web-wire-location #f)
+        (let* ((cache-dir (find-system-path 'cache-dir))
+               (os-dir (build-path cache-dir (os)))
+               (web-wire-prg (build-path os-dir (web-wire-exe)))
+               )
+          (unless (file-exists? web-wire-prg)
+            (error "Web wire executable not found: '~a'" web-wire-prg))
+          os-dir)
+        (let ((web-wire-prg (build-path user-web-wire-location (web-wire-exe))))
+          (unless (file-exists? web-wire-prg)
+            (error "Web wire executable not found: '~a'" web-wire-prg))
+          user-web-wire-location)
+        ))
+
+  (define (web-wire-prg)
+    (build-path (web-wire-dir) (web-wire-exe)))
 
   (define (do-download-and-extract release version os-dir)
     (let* ((url (string->url release))
@@ -150,6 +169,7 @@
               (write-to-file version version-file)
               ))
           ))))
+  
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   ;; Some utils
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -380,7 +400,7 @@
           ;; Start the web-wire process for errors and events in an other thread
           (let ((cwd (current-directory)))
             (current-directory (web-wire-dir))
-            (let ((ports (process (web-wire-exe))))
+            (let ((ports (process (format "~a" (web-wire-prg)))))
               (current-directory cwd)
               (let ((from-ww (car ports))
                     (to-ww (cadr ports))
@@ -392,7 +412,10 @@
                 (set! ww-to-ww to-ww)
                 (set! ww-from-ww from-ww)
                 (set! ww-quit #f)
-                
+
+                (when (eq? from-ww #f)
+                  (error (format "Process web wire did not start correctly: ~a" (web-wire-prg))))
+
                 (parameterize ([current-eventspace (current-eventspace)])
                   (set! ww-err-thread
                         (thread (lambda () (web-wire-err-handler err-from-ww))))
