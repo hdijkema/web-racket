@@ -3,7 +3,11 @@
   (require racket/gui
            "web-wire.rkt"
            "css.rkt"
+           "../utils/sprintf.rkt"
            html-printer
+           (prefix-in g: gregor)
+           (prefix-in g: gregor/time)
+           gregor-utils
            )
   
   (provide ww-element%
@@ -49,6 +53,11 @@
        (when (> (+ _std_x _std_w) w)
          (set! _std_x 50))
        )))
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; Class representing an element in the HTML page
+  ;;   each element is identified by an id. 
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
   (define ww-element%
     (class object%
@@ -144,32 +153,126 @@
       )
     )
 
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; Classes representing different kinds of input/textarea elements in html
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  (define-syntax inp-set!
+    (syntax-rules ()
+      ((_ var val)
+       (set! var val))))
+  
+
+  ;;;; Generic input
   (define ww-input%
     (class ww-element%
 
+      (define val #f)
+
       (define/public (get)
-        (ww-get-value (send this get-win-id) (send this get-id)))
+        val)
 
       (define/public (set! v)
-        (ww-set-value (send this get-win-id) (send this get-id) v))
+        (inp-set! val v)
+        (ww-set-value (send this get-win-id)
+                      (send this get-id) v))
 
       (define/override (disable)
         (super disable)
-        (ww-set-attr (send this get-win-id) (send this get-id) 'disabled ""))
+        (ww-set-attr (send this get-win-id)
+                     (send this get-id) 'disabled ""))
 
       (define/override (enable)
         (super enable)
-        (ww-del-attr (send this get-win-id) (send this get-id) 'disabled))
+        (ww-del-attr (send this get-win-id)
+                     (send this get-id) 'disabled))
           
+      (super-new)
+
+      (begin
+        (inp-set! val (ww-get-value (send this get-win-id)
+                                    (send this get-id)))
+        (send this connect 'input (λ (data)
+                                    (inp-set! val (hash-ref data 'value))))
+        (send (send this win) bind 'input (format "#~a" (send this get-id)))
+        )
+      ))
+
+
+  ;;;; Email input
+  (define ww-input-email%
+    (class ww-input%
+
       (super-new)))
 
+  ;;;; Date input
   (define ww-input-date%
     (class ww-input%
 
       (define/override (get)
         (let ((val (super get)))
-          val))
+          (g:parse-date val "yyyy-MM-dd")))
 
+      (define/override (set! d)
+        (when (racket-date? d)
+          (set! (date->moment d)))
+        (unless (or (g:date? d) (g:moment? d) (g:datetime? d))
+          (error "set! - gregor date expected"))
+        (super set! (sprintf "%04d-%02d-%02d" (g:->year d) (g:->month d) (g:->day d)))
+        d)
+
+      (super-new)
+      ))
+
+  ;;;; Time input
+
+  (define ww-input-time%
+    (class ww-input%
+
+      (define/override (get)
+        (let ((val (super get)))
+          (with-handlers ([exn:fail?
+                           (λ (e) (g:parse-time val "HH:mm"))])
+            (g:parse-time val "HH:mm:ss"))))
+
+      (define/override (set! t)
+        (when (racket-date? t)
+          (set! (date->moment t)))
+        (unless (or (g:time? t) (g:datetime? t) (g:moment? t))
+          (error "set! - gregor time?, moment? or datetime? expected"))
+        (super set! (sprintf "%02d:%02d:%02d" (g:->hours t) (g:->minutes t) (g:->seconds t))))
+
+      (super-new)
+      ))
+
+  ;;;;; Date-time local
+  (define ww-input-datetime%
+    (class ww-input%
+
+      (define/override (get)
+        (let ((val (super get)))
+          (with-handlers ([exn:fail?
+                           (λ (e) (g:parse-moment val "yyyy-MM-dd'T'HH:mm:ss"))])
+            (g:parse-moment val "yyyy-MM-dd'T'HH:mm"))))
+
+      (define/override (set! m)
+        (when (racket-date? m)
+          (set! date->moment m))
+        (unless (or (g:datetime? m) (g:moment? m) (g:date? m) (g:time? m))
+          (error "set! - gregor time? , date?, datetime? or moment? expected"))
+        #t)
+
+      (super-new)
+      )
+    )
+
+  ;;;; Range
+  (define ww-input-range%
+    (class ww-input%
+
+      (define/override (get)
+        (let ((val (super get)))
+          val))
       (super-new)
       ))
 
@@ -199,6 +302,7 @@
         (cond
           ([eq? evt 'page-loaded] (send this html-loaded))
           ([eq? evt 'click] (handle-click (car content) (cadr content)))
+          ([eq? evt 'input] (handle-input (car content) (cadr content)))
           ([eq? evt 'change] (handle-change (car content) (cadr content)))
           ([eq? evt 'resized] (let* ((m (regexp-match re-resize content))
                                      (width* (string->number (cadr m)))
@@ -238,6 +342,11 @@
           (unless (eq? el #f)
             (send el callback 'change (hash-ref data 'value)))))
 
+      (define/public (handle-input element-id data)
+        (let ((el (hash-ref elements element-id #f)))
+          (unless (eq? el #f)
+            (send el callback 'input data))))
+
       (define/public (handle-navigate url type kind)
         (let ((method (if (eq? kind 'set-html) 'set-html-file! 'set-url)))
           (cond
@@ -256,10 +365,12 @@
            (cond
              ([eq? type 'text] ww-input%)
              ([eq? type 'date] ww-input-date%)
+             ([eq? type 'datetime-local] ww-input-datetime%)
              (else ww-input%)))
           (else ww-element%)))
 
       (define/public (bind event selector . forced-cl)
+        (ww-debug (format "call to bind ~a ~a ~a" event selector forced-cl))
         (let ((infos (ww-bind win-id event selector)))
           (for-each (λ (info)
                       (let* ((id (car info))
@@ -269,8 +380,10 @@
                         (let ((cl (if (null? forced-cl)
                                       (cl-selector tag type)
                                       (car forced-cl))))
-                          (hash-set! elements id
-                                     (new cl [win-id win-id] [id id])))))
+                          (unless (hash-has-key? elements id)
+                            (hash-set! elements id 'in-the-making)
+                            (hash-set! elements id
+                                       (new cl [win-id win-id] [id id]))))))
                     infos)))
 
       (define/public (bind-inputs)
@@ -283,22 +396,22 @@
         )
 
       (define/public (element id)
-        (let ((el (hash-ref elements id 'no-element-with-id-in-hash)))
-          (if (eq? el 'no-element-with-id-in-hash)
-              (let ((info (ww-element-info win-id id)))
-                (let* ((el-id (car info))
-                       (tag (cadr info))
-                       (type (caddr info))
-                       (exist (cadddr info))
-                       )
-                  (unless exist
-                    (ww-debug (format "Element ~a does not exist!" id)))
-                  (let* ((cl (cl-selector tag type))
-                         (obj (new cl [win-id win-id] [id id])))
-                    (hash-set! elements el-id obj)
-                    ))
-                (element id))
-              el)))
+        (unless (hash-has-key? elements id)
+          (let ((info (ww-element-info win-id id)))
+            (let* ((el-id (car info))
+                   (tag (cadr info))
+                   (type (caddr info))
+                   (exist (cadddr info))
+                   )
+              (unless exist
+                (ww-debug (format "Element ~a does not exist!" id)))
+              (let* ((cl (cl-selector tag type))
+                     (obj (new cl [win-id win-id] [id id])))
+                (hash-set! elements el-id obj)
+                ))
+            (element id))
+          )
+        (hash-ref elements id))
 
       (define/public (get-elements selector)
         (ww-get-elements win-id selector))

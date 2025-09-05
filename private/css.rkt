@@ -31,13 +31,15 @@
     (
      [style #:auto #:mutable]
      )
-    #:auto-value (make-hash))
+    #:auto-value (make-hash)
+    #:transparent)
 
   (define-struct css-stylesheet
     (
      [sheet #:auto #:mutable]
      )
-     #:auto-value (make-hashalw))
+     #:auto-value (make-hashalw)
+    #:transparent)
 
   (define st-style style-style)
   (define make-st make-style)

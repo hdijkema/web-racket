@@ -11,6 +11,7 @@
            json
            "../utils/utils.rkt"
            "css.rkt"
+           "webui-wire-ffi.rkt"
            )
 
   (provide ww-start
@@ -246,7 +247,7 @@
       ))
   
   (define re-kind #px"([A-Z]+)[(]([0-9]+)[)][:]")
-  (define re-event #px"([^:]+)[:]([0-9]+)([:](.*))?")
+  ;(define re-event #px"([^:]+)[:]([0-9]+)([:](.*))?")
   (define re-js-event #px"^([^:]+)([:](.*))?")
   (define re-js-result #px"([0-9]+)[:]([^:]+)[:](.*)")
   (define re-js-handle #px"([^:]+)[:]([0-9]+)[:]([0-9]+)([:](.*))?")
@@ -272,6 +273,7 @@
                  )
             handle))))
 
+  #|
   (define (ww-start)
     (ww-debug "ww-start called")
 
@@ -433,7 +435,101 @@
   (define (new-handle)
     (set! current-handle (+ current-handle 1))
     current-handle)
+  |#
 
+  (define-struct web-rkt
+    ([handle #:mutable]
+     [event-and-log-thread #:mutable]
+     [stop-thread #:mutable]
+     )
+    )
+
+  (define ww-current-handle #f)
+
+  (define log-fifo (make-queue))
+  (define log-fifo-max 100)
+
+  (define re-event #px"^([^:]+)([:]([^:]+))?")
+  
+  (define (process-event h evt)
+    (let ((m (regexp-match re-event evt)))
+      (displayln evt)
+      (let* ((e (string->symbol (string-downcase (list-ref m 1))))
+             (win-id (if (eq? (list-ref m 3) #f) #f (string->number (list-ref m 3))))
+             (win (hash-ref windows-evt-handlers win-id #f))
+             (payload (substring evt (string-length (list-ref m 0))))
+            )
+        (if (eq? win #f)
+            (displayln (format "no window to handle event ~a" evt))
+            (win e payload)))))
+
+  (define (process-log h kind msg)
+    (unless (< (queue-length log-fifo) log-fifo-max)
+      (dequeue! log-fifo)
+      (process-log h kind msg))
+    (enqueue! log-fifo (cons kind msg)))
+
+  (define (ww-display-log)
+    (for-each (λ (item)
+                   (displayln (format "~a - ~a" (car item) (cdr item))))
+              (queue->list log-fifo)))
+
+  (define (event-and-log-handler h)
+     (parameterize ([current-eventspace (current-eventspace)])
+       (let ((ww-h (web-rkt-handle h)))
+         (thread
+          (lambda ()
+            (letrec ((f (lambda ()
+                          (let* ((count (webwire-items ww-h))
+                                 (item (if (= count 0)
+                                           '(null)                ; If we know the count to be 0, we don't wait on a semaphore in the C library (will block racket).
+                                           (webwire-get ww-h)))
+                                 (info (car item)))
+                            (cond
+                              ([eq? info 'invalid-handle]
+                               'invalid-handle)
+                              ([eq? info 'null]
+                               (sleep 0.1) ; give others room to do something
+                               (f))
+                              ([eq? info 'event]
+                               (begin
+                                 (process-event h (cadr item))
+                                 (f)))
+                              ([eq? info 'log]
+                               (begin
+                                 (process-log h (caddr item) (cadddr item))
+                                 (f)))
+                              )
+                            )))
+                     )
+              (f))
+            ))
+         ))
+    )
+
+  (define (ww-start)
+    (when (eq? ww-current-handle #f)
+      (let ((existing-h (webwire-current)))
+        (let ((h (make-web-rkt (if (eq? existing-h #f)
+                                  (webwire-new)
+                                  existing-h)
+                              #f
+                              #f)))
+          (unless (eq? (webwire-status (web-rkt-handle h)) 'valid)
+            (error (format "Invalid handle, cannot start. Reason: ~a"
+                           (webwire-status->string
+                            (webwire-status (web-rkt-handle h))))))
+          (let ((thrd (event-and-log-handler h)))
+            (set-web-rkt-event-and-log-thread! h thrd)
+            (set! ww-current-handle h)))))
+    ww-current-handle)
+
+  (define (ww-stop)
+    (unless (eq? ww-current-handle #f)
+      (webwire-destroy (web-rkt-handle ww-current-handle))
+      (set! ww-current-handle #f)))
+
+  #|
   (define (do-cmd cmd)
     (if (eq? ww-to-ww #f)
         (ww-error
@@ -443,7 +539,64 @@
           (flush-output ww-to-ww))
         )
     )
-      
+  |#
+
+  (define-struct cmdr
+    (ok kind win r))
+
+  (define (cmdr->list r)
+    (list (cmdr-ok r) (cmdr-kind r)
+          (cmdr-win r) (cmdr-r r)))
+
+  (define (cmdr-dbg r)
+    (displayln (cmdr->list r)))
+
+
+  (define re-generic-result #px"^(OK|NOK)[:]([^:]+)([:]([0-9]+))?")
+
+  (define (convert-result result)
+    (let ((m (regexp-match re-generic-result result)))
+      (displayln result)
+      (displayln m)
+      (if m
+          (let* ((ok (string=? (list-ref m 1) "OK"))
+                 (kind (list-ref m 2))
+                 (win (if (eq? (list-ref m 4) #f)
+                          #f
+                          (string->number (list-ref m 4))))
+                 (r (substring result (string-length (list-ref m 0))))
+                 )
+            (make-cmdr ok (string->symbol kind)
+                       win
+                       (if (string-prefix? r ":")
+                           (substring r 1)
+                           r)))
+          (make-cmdr #f 'parse-error #f result))
+      )
+    )
+
+  (define (check-nok cmd r)
+    (when (eq? (cmdr-ok r) #f)
+      (process-log ww-current-handle 'CMD-NOK
+                   (format "~a - ~a" cmd (cmdr->list r)))))
+
+  
+  (define (ww-cmd cmd)
+    (if (eq? cmd 'quit)
+        (let ((result (webwire-command (web-rkt-handle ww-current-handle) "exit")))
+          (let ((r (convert-result result)))
+            (check-nok cmd r)
+            (ww-stop)
+            (set! ww-quit #t)
+            r))
+        (let ((result (webwire-command (web-rkt-handle ww-current-handle) cmd)))
+          (let ((r (convert-result result)))
+            (check-nok cmd r)
+            r))))
+
+
+  (define ww-await (lambda x #t))
+  #|
 
   (define (ww-cmd cmd)
     (if (eq? cmd 'quit)
@@ -493,7 +646,9 @@
         )
     )
 
-  (define (ww-await handle cmd)
+  |#
+
+  #|(define (ww-await handle cmd)
     (hash-set! handle-semaphores handle (make-semaphore 0))
     (hash-set! handle-results handle #f)
     (let* ((r (ww-cmd cmd))
@@ -514,20 +669,21 @@
           )
       )
     )
+  |#
   
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   ;; Web Wire Commands
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
   ;; Stop the QtWebEngine
-  (define (ww-stop)
-    (ww-debug "ww-stop called")
-    (let ((win-ids (hash-keys windows-evt-handlers)))
-      (for-each (λ (win-id)
-                  (ww-close win-id))
-                win-ids))
-    (let ((r (ww-cmd 'quit)))
-      (car r)))
+ ; (define (ww-stop)
+ ;   (ww-debug "ww-stop called")
+ ;   (let ((win-ids (hash-keys windows-evt-handlers)))
+ ;     (for-each (λ (win-id)
+ ;                 (ww-close win-id))
+ ;               win-ids))
+ ;   (let ((r (ww-cmd 'quit)))
+ ;     (car r)))
 
   ;; Global stylesheet
   (define (ww-set-stylesheet st)
@@ -545,7 +701,7 @@
   (define (ww-get-stylesheet)
     (let ((cmd (format "get-stylesheet")))
       (let ((r (ww-cmd cmd)))
-        (displayln r)
+        (cmdr-dbg r)
         #t)))
   
   ;; Debug window
@@ -562,24 +718,19 @@
                                   (format " ~a" (car parent)))))
            (cmd (string-append "new " (format "~a" profile) parent-win-id))
            (r (ww-cmd cmd)))
-      (let ((ok (car r))
-            (res (cdr r)))
-        (if ok
-            (let* ((win-str-id (drop "new" res))
-                   (win-id (if (eq? win-str-id #f) #f (string->number win-str-id)))
-                   )
-              win-id)
-            #f))))
+      (let ((ok (cmdr-ok r))
+            (win-id (cmdr-win r)))
+        win-id)))
 
   ;; Close window
   (define (ww-close win-id)
     (let ((r (ww-cmd (format "close ~a" win-id))))
-      (car r)))
+      r))
 
   ;; Move window
   (define (ww-move win-id x y)
     (let ((r (ww-cmd (format "move ~a ~a ~a" win-id x y))))
-      (car r)))
+      r))
 
   ;; Resize window
   (define (ww-resize win-id width height)
@@ -589,7 +740,7 @@
   ;; Set title of window
   (define (ww-set-title win-id title)
     (let ((r (ww-cmd (format "set-title ~a ~a" win-id (as-string title)))))
-      (car r)))
+      r))
 
 
   ;; Set icon of window
@@ -599,7 +750,7 @@
                (cmd (format "set-icon ~a ~a"
                                     win-id (as-string (format "~a" icon-file))))
                (r (ww-cmd cmd)))
-          (car r))
+          r)
         (error "ww-set-icon - file does not exist")))
 
   ;; Set menu of window
@@ -726,70 +877,71 @@
             (car r)))))
     )
 
+  (define (new-handle)
+    #t)
 
   ;; set url
   (define (ww-set-url win-id url)
-    (let ((cmd (format "set-url ~a ~a ~a"
-                       win-id (new-handle) (as-string url))))
+    (let ((cmd (format "set-url ~a ~a"
+                       win-id (as-string url))))
       (ww-cmd cmd)))
   
 
   ;; Set html of window
   (define (ww-set-html win-id html-file)
     (if (file-exists? html-file)
-        (let ((cmd (format "set-html ~a ~a ~a"
-                           win-id (new-handle)
+        (let ((cmd (format "set-html ~a ~a"
+                           win-id 
                            (as-string (to-server-file html-file)))))
           (let ((r (ww-cmd cmd)))
-            (car r)))
+            r))
         (error "set-html: file does not exist")
         ))
 
   ;; Set inner html of an Id of the HTML in the window
   (define (ww-set-inner-html win-id element-id html-or-file)
     (if (file-exists? html-or-file)
-        (let* ((js-handle (new-handle))
-               (cmd (format "set-inner-html ~a ~a ~a ~a"
-                            win-id js-handle
+        (let* ((cmd (format "set-inner-html ~a ~a ~a"
+                            win-id 
                             (format "~a" element-id)
                             (as-string (to-server-file html-or-file))))
                )
-          (ww-await js-handle cmd))
-        (let* ((js-handle (new-handle))
-               (cmd (format "set-inner-html ~a ~a ~a ~a"
-                            win-id js-handle
+          (ww-cmd cmd))
+        (let* ((cmd (format "set-inner-html ~a ~a ~a"
+                            win-id 
                             (format "~a" element-id)
                             (as-string (format "~a" html-or-file))))
                )
-          (ww-await js-handle cmd))
+          (ww-cmd cmd))
         ))
 
   ;; Het the inner html of an id of the HTML in the window
   (define (ww-get-inner-html win-id element-id)
-    (let* ((js-handle (new-handle))
-           (cmd (format "get-inner-html ~a ~a ~a"
-                        win-id js-handle (format "~a" element-id)))
+    (let* ((cmd (format "get-inner-html ~a ~a"
+                        win-id (format "~a" element-id)))
            )
-      (ww-await js-handle cmd)))
+      (ww-cmd cmd)))
 
   ;; Set attribute of element in html
   (define (ww-set-attr win-id element-id attr val)
-    (let* ((js-handle (new-handle))
-           (cmd (format "set-attr ~a ~a ~a ~a ~a" win-id js-handle
-                        (as-string element-id) (as-string attr) (as-string val))))
-      (displayln cmd)
+    (let* ((cmd (format "set-attr ~a ~a ~a ~a" win-id 
+                        (as-string element-id)
+                        (as-string attr) (as-string val))))
       (ww-cmd cmd)))
 
   ;; Get attribute value of element in html
   (define (ww-get-attr win-id element-id attr)
-    (let* ((js-handle (new-handle))
-           (cmd (format "get-attr ~a ~a ~a ~a" win-id js-handle
+    (let* ((cmd (format "get-attr ~a ~a ~a" win-id 
                         (as-string element-id) (as-string attr))))
-      (ww-await js-handle cmd)))
-
+      (ww-cmd cmd)))
   
   ;; Get all attributes of an element with given id
   (define (mk-attrs _attrs)
+    (let* ((r (cmdr-r _attrs))
+           (rr (hash-ref 'result
+                         (with-input-from-string
+                             (string-replace r "\\\"" "\"")
+                           read-json))))
       (let* ((attrs (make-hash)))
         (for-each (λ (attr-val)
                     (hash-set! attrs
@@ -797,13 +949,12 @@
                                (cadr attr-val)))
                   _attrs)
         attrs)
-    )
+    ))
   
   (define (ww-get-attrs win-id element-id)
-    (let* ((js-handle (new-handle))
-           (cmd (format "get-attrs ~a ~a ~a" win-id js-handle
+    (let* ((cmd (format "get-attrs ~a ~a" win-id 
                         (as-string element-id))))
-      (mk-attrs (ww-await js-handle cmd))))
+      (mk-attrs (ww-cmd cmd))))
 
   ;; Get info of all elements for a selector
   (define (ww-get-elements win-id selector)
@@ -814,7 +965,7 @@
              (cons (string->symbol (car item))
                    (mk-attrs (cadr item)))
              )
-           (ww-await js-handle cmd))))
+           (ww-cmd cmd))))
 
   ;; Delete attribute of element
   (define (ww-del-attr win-id element-id attr)
@@ -847,6 +998,7 @@
     (let* ((js-handle (new-handle))
            (cmd (format "bind ~a ~a ~a ~a" win-id js-handle
                        (as-string event) (as-string selector))))
+      (ww-debug cmd)
       (map (lambda (info)
              (map string->symbol info))
              (ww-await js-handle cmd))))
