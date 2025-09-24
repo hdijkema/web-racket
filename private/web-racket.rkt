@@ -3,11 +3,13 @@
   (require racket/gui
            "web-wire.rkt"
            "css.rkt"
+           "menu.rkt"
            "../utils/sprintf.rkt"
            html-printer
            (prefix-in g: gregor)
            (prefix-in g: gregor/time)
            gregor-utils
+           net/sendurl
            )
   
   (provide ww-element%
@@ -70,12 +72,13 @@
         id)
 
       (define/public (win)
-        (let ((w (hash-ref windows win-id #f)))
+        (let ((w (hash-ref windows (ww-win-id win-id) #f)))
           w))
 
       (define connected-callbacks (make-hash))
 
       (define/public (callback evt . args)
+        (ww-debug (format "Callback for ~a - ~a - ~a" id evt args))
         (let ((cb (hash-ref connected-callbacks evt #f)))
           (unless (eq? cb #f)
             (with-handlers ([exn:fail?
@@ -193,7 +196,11 @@
         (inp-set! val (ww-get-value (send this get-win-id)
                                     (send this get-id)))
         (send this connect 'input (λ (data)
-                                    (inp-set! val (hash-ref data 'value))))
+                                    (ww-debug data)
+                                    (let ((js-evt (hash-ref data 'js-evt #f)))
+                                      (unless (eq? js-evt #f)
+                                        (when (hash-has-key? js-evt 'value)
+                                          (inp-set! val (hash-ref js-evt 'value)))))))
         (send (send this win) bind 'input (format "#~a" (send this get-id)))
         )
       ))
@@ -280,6 +287,7 @@
     (class object%
       
       (init-field [profile 'default-profile]
+                  [use-browser #t]
                   [parent-id #f]
                   [parent #f]
                   [title "Racket HTML Window"]
@@ -296,37 +304,43 @@
 
       (define menu-cbs (make-hash))
       (define elements (make-hash))
+      (define html-handle #f)
       
-      (define (event-handler type evt content)
-        (ww-debug (format "win-id=~a '~a '~a ~a" win-id type evt content))
+      (define (event-handler evt content)
+        (ww-debug (format "win-id=~a '~a ~a" win-id evt content))
         (cond
-          ([eq? evt 'page-loaded] (send this html-loaded))
-          ([eq? evt 'click] (handle-click (car content) (cadr content)))
-          ([eq? evt 'input] (handle-input (car content) (cadr content)))
-          ([eq? evt 'change] (handle-change (car content) (cadr content)))
-          ([eq? evt 'resized] (let* ((m (regexp-match re-resize content))
-                                     (width* (string->number (cadr m)))
-                                     (height* (string->number (caddr m)))
+          ([eq? evt 'page-loaded] (let ((page-handle (hash-ref content 'page_handle 'none)))
+                                    (ww-debug (format "html-handle: ~a, page-handle: ~a, equal?: ~a"
+                                                      html-handle
+                                                      page-handle
+                                                      (equal? html-handle page-handle)))
+                                    (when (and (number? html-handle) (number? page-handle) (= html-handle page-handle))
+                                      (send this html-loaded))))
+          ([eq? evt 'click] (handle-click (string->symbol (hash-ref content 'id)) content))
+          ([eq? evt 'input] (handle-input (string->symbol (hash-ref content 'id)) content))
+          ([eq? evt 'change] (handle-change (string->symbol (hash-ref content 'id)) content))
+          ([eq? evt 'resized] (let* ((width* (hash-ref content 'width))
+                                     (height* (hash-ref content 'height))
                                      )
                                 (set! width width*)
                                 (set! height height*)))
-          ([eq? evt 'moved] (let* ((m (regexp-match re-move content))
-                                   (x* (string->number (cadr m)))
-                                   (y* (string->number (caddr m)))
+          ([eq? evt 'moved] (let* ((x* (hash-ref content 'x))
+                                   (y* (hash-ref content 'y))
                                    )
                               (set! x x*)
                               (set! y y*)
                               ))
           ([eq? evt 'request-close] (when (send this can-close?)
                                       (send this close)))
-          ([eq? evt 'menu-item-choosen] (let* ((menu-id (string->symbol content))
+          ([eq? evt 'menu-item-choosen] (let* ((menu-id (string->symbol (hash-ref content 'item)))
                                                (cb (hash-ref menu-cbs menu-id #f)))
                                           (unless (eq? cb #f)
                                             (cb))))
-          ([eq? evt 'navigate] (let* ((m (regexp-match re-navigate content))
-                                      (url (ww-from-string (cadr m)))
-                                      (type (string->symbol (caddr m)))
-                                      (kind (string->symbol (cadddr m)))
+          ([eq? evt 'navigate] (let* ((url (hash-ref content 'url))
+                                      (kind (string->symbol (hash-ref content
+                                                                      'navigation-kind)))
+                                      (type (string->symbol (hash-ref content
+                                                                      'navigation-type)))
                                       )
                                 (send this handle-navigate url type kind)))
           )
@@ -335,12 +349,13 @@
       (define/public (handle-click element-id data)
         (let ((el (hash-ref elements element-id #f)))
           (unless (eq? el #f)
+            (ww-debug (format "CALLING CALLBACK FOR ~a" element-id))
             (send el callback 'click data))))
 
       (define/public (handle-change element-id data)
         (let ((el (hash-ref elements element-id #f)))
           (unless (eq? el #f)
-            (send el callback 'change (hash-ref data 'value)))))
+            (send el callback 'change data 'value))))
 
       (define/public (handle-input element-id data)
         (let ((el (hash-ref elements element-id #f)))
@@ -350,7 +365,7 @@
       (define/public (handle-navigate url type kind)
         (let ((method (if (eq? kind 'set-html) 'set-html-file! 'set-url)))
           (cond
-            ([eq? type 'link-clicked]
+            ([eq? type 'standard]
              (dynamic-send this method url))
             (else (ww-error (format "Don't know what to do for ~a - ~a" type url)))
             )
@@ -435,12 +450,15 @@
       (define/public (get-title)
         title)
 
+      (define/public (set-icon! icn)
+        (ww-set-icon win-id icn))
+
       (define/public (set-html-file! file)
         (set! html-file file)
-        (ww-set-html win-id html-file))
+        (set! html-handle (ww-set-html win-id html-file)))
 
       (define/public (set-url url)
-        (ww-set-url win-id url))
+        (send-url url))
 
       (define/public (html-loaded)
         (send this bind-buttons)
@@ -468,23 +486,23 @@
         (ww-set-show-state win-id 'fullscreen))
 
       (define/public (show-state)
-        (ww-show-state win-id))
+        (ww-get-show-state win-id))
 
       (define/public (can-close?)
         #t)
       
       (define/public (close)
         (ww-close win-id)
-        (hash-remove! windows win-id)
-        (hash-remove! windows-evt-handlers win-id)
+        (hash-remove! windows (ww-win-id win-id))
+        (hash-remove! windows-evt-handlers (ww-win-id win-id))
         (when (= (hash-count windows) 0)
           (ww-stop))
         )
 
-      (define/public (set-menu menu-def)
+      (define/public (set-menu! menu-def)
         (ww-set-menu win-id menu-def))
 
-      (define/public (connect-menu id cb)
+      (define/public (connect-menu! id cb)
         (hash-set! menu-cbs id cb))
 
       ; files and directories
@@ -534,7 +552,10 @@
               )
           )
         )
-               
+
+      ; Supers first
+      (super-new)
+
       ; construct
       (begin
         (when (= (hash-count windows) 0)
@@ -550,29 +571,31 @@
         
         (next-window-init-position)
         
-        (set! win-id (ww-new profile parent-id))
+        (set! win-id
+              (if (eq? parent-id #f)
+                  (ww-new profile use-browser)
+                  (ww-new profile use-browser parent-id)))
         (when (eq? win-id #f)
           (error "Window could not be constructed"))
 
-        (hash-set! windows-evt-handlers win-id event-handler)
-        (hash-set! windows win-id this)
+        (hash-set! windows-evt-handlers (ww-win-id win-id) event-handler)
+        (hash-set! windows (ww-win-id win-id) this)
 
         (ww-move win-id x y)
         (ww-resize win-id width height)
         
-        (ww-set-title win-id title)
+        (send this set-title! title)
         
         (unless (eq? icon #f)
-          (ww-set-icon win-id icon))
+          (send this set-icon! icon))
         
         (unless (eq? menu #f)
-          (ww-set-menu win-id menu))
+          (send this set-menu! menu))
         
         (unless (eq? html-file #f)
-          (ww-set-html win-id html-file))
+          (send this set-html-file! html-file))
         )
 
-      (super-new)
     ))
 
   (define (set-global-stylesheet st)
@@ -587,11 +610,18 @@
   ;; Testing stuff
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  (define test-menu
-    '(("File" (("Open" open) ("Close" close) ("Quit" quit)))
-      ("Edit" (("Copy" copy) ("Advanced" (("Copy 1" copy1) ("Copy 2" copy2)))
-                              ("Cut" cut) ("Paste" paste)))
-      ))
+  (define test-menu (menu (menu-item 'm-file "File"
+                             #:submenu
+                             (menu (menu-item 'm-open "Open File")
+                                   (menu-item 'm-close "Close File")
+                                   (menu-item 'm-quit "Quit" #:separator #t)))
+                  (menu-item 'm-edit "Edit"
+                             #:submenu
+                             (menu (menu-item 'm-copy "Copy")
+                                   (menu-item 'm-cut  "Cut")
+                                   (menu-item 'm-paste "Paste")
+                                   (menu-item 'm-prefs "Preferences" #:separator #t)
+                                   ))))
 
   (define test-dialog%
     (class ww-window%
@@ -601,6 +631,7 @@
 
       (define/override (html-loaded)
         (super html-loaded)
+        (ww-debug "html-loaded for test-dialog%")
         (let* ((btn (send this element 'ok-btn)))
           (send btn connect 'click (λ (data)
                                      (send this close)))))
@@ -611,15 +642,17 @@
       (super-new [html-file "../../web-wire/test/test1.html"])
 
       (define/override (html-loaded)
+        (ww-debug "HTML LOADED")
         (super html-loaded)
         (let* ((btn (send this element 'app-button)))
           (send btn connect  'click (λ (data)
-                                (new test-dialog% [parent this]))))
-          )
+                                      (new test-dialog% [parent this]))))
+        (ww-debug "SETTING MENU")
+        (send this set-menu! test-menu)
+        (send this connect-menu! 'm-quit (λ () (send this close)))
+        )
 
       (begin
-        (send this set-menu test-menu)
-        (send this connect-menu 'quit (λ () (send this close)))
         )
       )
     )

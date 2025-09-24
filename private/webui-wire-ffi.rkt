@@ -5,14 +5,19 @@
          ffi/unsafe/atomic
          setup/dirs
          "../utils/utils.rkt"
-         (prefix-in g: racket/gui)
+         (rename-in racket/gui
+                    (-> %->))
+         data/queue
          )
 
 (provide webwire-new
          webwire-current
+         webwire-id
          webwire-destroy
          webwire-command
          webwire-items
+         webwire-items-available
+         webwire-handlers!
          webwire-get
          webwire-status
          webwire-status->string
@@ -81,8 +86,8 @@
   #:c-id webwire_destroy)
 
 (define-libwebui-wire webwire-command
-  (_fun _webui-handle/null _string/utf-8
-        -> [r : _string/utf-8]
+  (_fun _webui-handle/null _string*/utf-8
+        -> [r : _string*/utf-8]
         -> r
         )
   #:c-id webwire_command)
@@ -93,9 +98,9 @@
 
 (define-libwebui-wire webwire-get
   (_fun _webui-handle/null
-        [evt : (_ptr o _string/utf-8)]
-        [kind : (_ptr o _string/utf-8)]
-        [msg : (_ptr o _string/utf-8)]
+        [evt : (_ptr o _string*/utf-8)]
+        [kind : (_ptr o _string*/utf-8)]
+        [msg : (_ptr o _string*/utf-8)]
         -> [ result : _webui-get-result ]
         -> (list result
                  evt
@@ -104,19 +109,28 @@
         )
   #:c-id webwire_get)
 
-#|
-                 (if (eq? evt #f)
-                     #f
-                     (cast evt _pointer _string/utf-8))
-                 (if (eq? kind #f)
-                     #f
-                     (string->symbol
-                      (cast kind _pointer _string/utf-8)))
-                 (if (eq? msg #f)
-                     #f
-                     (cast msg _pointer _string/utf-8))
-                 )
-|#
+(define-libwebui-wire webwire-id
+  (_fun _webui-handle/null
+        -> _int)
+  #:c-id webwire_handle_id)
+
+(define my-count 0)
+(define last-queue-count -1)
+(define (f c) (set! my-count (+ my-count 1)) (set! last-queue-count c))
+
+(define (appl thunk)
+  (thunk))
+  
+(define-libwebui-wire webwire-items-available
+  (_fun _webui-handle/null (_cprocedure (list _int) _void #:async-apply appl) -> _void)
+  #:c-id webwire_set_signaller)
+
+(define-libwebui-wire webwire-handlers!
+  (_fun _webui-handle/null
+        (_fun #:async-apply appl _bytes/nul-terminated -> _void)
+        (_fun #:async-apply appl _bytes/nul-terminated _bytes/nul-terminated -> _void)
+        -> _bool)
+  #:c-id webwire_set_handlers)
 
 (define-libwebui-wire webwire-status
   (_fun _webui-handle/null -> _webui-handle-status)
@@ -125,7 +139,7 @@
 
 (define-libwebui-wire webwire-status->string
   (_fun _webui-handle-status
-        -> (r : _string/utf-8)
+        -> (r : _string*/utf-8)
         -> r)
   #:c-id webwire_status_string)
 
@@ -180,4 +194,66 @@
                                   r
                                   (f))))))
                 (f)))))
+
+
+(define evt-fifo (make-queue))
+(define log-fifo (make-queue))
+
+
+(define (qthread)
+  (parameterize ([current-eventspace (current-eventspace)])
+    (thread
+     (lambda ()
+       (letrec ((f (lambda ()
+                     (if (> (queue-length evt-fifo) 0)
+                         (let ((e (dequeue! evt-fifo)))
+                           (queue-callback (lambda ()
+                                             (display e)
+                                             (display " - ")
+                                             (displayln (current-thread))))
+                           (yield)
+                           (f))
+                         (begin
+                           ;(displayln 'sleeping)
+                           (sleep 0.005)
+                           (f))))))
+         (f))))
+    ))
+
+;(define (h-evt evt)
+;  (enqueue! evt-fifo evt))
+
+(define ce (current-eventspace))
+
+(define h-evt (parameterize ([current-eventspace ce])
+                (lambda (evt)
+                  (queue-callback (lambda ()
+                                      (enqueue! evt-fifo
+                                                (list evt (current-thread)))))
+                  (yield)))
+  )
+
+(define h-log  (parameterize ([current-eventspace ce])
+                (lambda (kind msg)
+                  (queue-callback (lambda ()
+                                      (enqueue! log-fifo
+                                                (list kind msg (current-thread)))))
+                  (yield)))
+  )
+  
+;  (enqueue! log-fifo (list kind msg (current-thread))))
+
+(define (h-ffi-evt evt)
+  (h-evt evt))
+;  (parameterize ([g:current-eventspace (g:current-eventspace)])
+;                    (lambda (evt) 
+;                      (g:queue-callback (lambda () (h-evt evt))))))
+
+(define (h-ffi-log kind msg)
+  (h-log kind msg))
+
+;  (parameterize ([g:current-eventspace (g:current-eventspace)])
+;                    (lambda (kind msg) 
+;                      (g:queue-callback (lambda () (h-log kind msg))))))
+
 
