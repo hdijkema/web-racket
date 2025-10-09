@@ -9,7 +9,6 @@
            (prefix-in g: gregor)
            (prefix-in g: gregor/time)
            gregor-utils
-           net/sendurl
            )
   
   (provide ww-element%
