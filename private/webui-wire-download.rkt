@@ -10,6 +10,7 @@
   
   (provide ww-current-win-release
            ww-download-if-needed
+           ww-set-web-wire-location!
            )
            
 

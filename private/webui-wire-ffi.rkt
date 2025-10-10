@@ -29,11 +29,16 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define webwire-will (make-will-executor))
-(void (thread (λ () (let loop () (will-execute webwire-will) (loop)))))
+;(void (thread (λ ()
+;                (let loop ()
+;                  (begin
+;                    (sleep 0.1)
+;                    (will-execute webwire-will) (loop))))))
 
 
 (define-ffi-definer define-libwebui-wire
-  (ffi-lib "c:/devel/racket/webui-wire/build/Debug/libwebui-wire.dll"
+  (ffi-lib ;"c:/devel/racket/webui-wire/build/Debug/libwebui-wire.dll"
+           "/home/hans/src/racket/webui-wire/build/Debug/liblibwebui-wire.so"
            #:custodian (current-custodian)))
   ;(ffi-lib "libwebui-wire" '("3" "4" "5" #f)
   ;         #:get-lib-dirs (lambda ()
@@ -143,9 +148,9 @@
         -> r)
   #:c-id webwire_status_string)
 
-
-
-
+(define-libwebui-wire webwire-process-gui
+  (_fun _webui-handle/null -> _void)
+  #:c-id webwire_process_gui)
 
 
 ;(define (webwire-new evt-cb log-cb)
@@ -257,3 +262,14 @@
 ;                      (g:queue-callback (lambda () (h-log kind msg))))))
 
 
+; Make sure GUI Events are processed (e.g. for linux - gtk main loop)
+(void (thread (λ ()
+                (let loop ()
+                  (begin
+                    (sleep 0.05)
+                    (webwire-process-gui #f)
+                    ;(displayln 'process-gui-ok)
+                    (loop)))
+                )
+              )
+      )

@@ -15,7 +15,6 @@
 
   (provide ww-start
            ww-stop
-           ww-set-web-wire-location!
 
            ww-set-debug
            ww-debug
@@ -170,6 +169,7 @@
     ([handle #:mutable]
      [event-thread #:mutable]
      [stop-thread #:mutable]
+     [reader-thread #:mutable]
      )
     )
 
@@ -188,7 +188,7 @@
     (semaphore-post evt-sem))
 
   (define (process-event h evt*)
-    (let* ((evt (bytes->string/utf-8 evt*))
+    (let* ((evt evt*) ;(bytes->string/utf-8 evt*))
            (m (regexp-match re-event evt)))
       (ww-debug evt)
       (let* ((e (string->symbol (string-downcase (list-ref m 1))))
@@ -202,6 +202,7 @@
         (if (eq? evt-handler #f)
             (ww-error (format "no event handler to handle event ~a" evt))
             (queue-callback (lambda () (evt-handler e payload))))
+;            (evt-handler e payload))
         )
       )
     )
@@ -225,8 +226,8 @@
             (dequeue! log-fifo)
             (ensure-fifo))
           (queue-length log-fifo)))
-    (let ((kind (bytes->string/utf-8 kind*))
-          (msg (bytes->string/utf-8 msg*)))
+    (let ((kind kind*) ;(bytes->string/utf-8 kind*))
+          (msg msg*)) ;(bytes->string/utf-8 msg*)))
       (enqueue! log-fifo (cons kind msg))
       (ensure-fifo)))
 
@@ -243,17 +244,36 @@
                                   (webwire-new)
                                   existing-h)
                               #f
+                              #f
                               #f)))
           (unless (eq? (webwire-status (web-rkt-handle h)) 'valid)
             (error (format "Invalid handle, cannot start. Reason: ~a"
                            (webwire-status->string
                             (webwire-status (web-rkt-handle h))))))
           (let ((thrd (event-handler h)))
-            (webwire-handlers! (web-rkt-handle h)
-                               event-queuer
-                               process-log)
-            (set-web-rkt-event-thread! h thrd)
-            (set! ww-current-handle h)))))
+            ;(webwire-handlers! (web-rkt-handle h)
+            ;                   event-queuer
+            ;                   process-log)
+            (let ((reader-thread (thread (λ ()
+                                           (let loop ()
+                                             (begin
+                                               (sleep 0.01)
+                                               (let ((l (webwire-get (web-rkt-handle h))))
+                                                 (let ((result (car l)))
+                                                   (unless (or (eq? result 'null) (eq? result 'invalid-handle))
+                                                     (let* ((evt (cadr l))
+                                                            (kind (caddr l))
+                                                            (msg (cadddr l)))
+                                                       (unless (eq? evt #f)
+                                                         (event-queuer evt))
+                                                       (unless (eq? kind #f)
+                                                         (process-log kind msg))))))
+                                               (loop)))
+                )
+              )))
+              (set-web-rkt-reader-thread! h reader-thread)
+              (set-web-rkt-event-thread! h thrd)
+              (set! ww-current-handle h))))))
     (unless (null? args)
       (ww-log-level (car args)))
     ww-current-handle)

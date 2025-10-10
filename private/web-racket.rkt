@@ -9,6 +9,7 @@
            (prefix-in g: gregor)
            (prefix-in g: gregor/time)
            gregor-utils
+           net/sendurl
            )
   
   (provide ww-element%
@@ -286,7 +287,7 @@
     (class object%
       
       (init-field [profile 'default-profile]
-                  [use-browser #t]
+                  [use-browser #f]
                   [parent-id #f]
                   [parent #f]
                   [title "Racket HTML Window"]
@@ -454,7 +455,9 @@
 
       (define/public (set-html-file! file)
         (set! html-file file)
-        (set! html-handle (ww-set-html win-id html-file)))
+        (set! html-handle (ww-set-html win-id html-file))
+        (ww-debug (format "html file set to ~a" html-file))
+        )
 
       (define/public (set-url url)
         (send-url url))
