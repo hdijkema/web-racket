@@ -193,15 +193,19 @@
       (super-new)
 
       (begin
+        (displayln (format "win-id: ~a, id: ~a" (send this get-win-id) (send this get-id)))
         (inp-set! val (ww-get-value (send this get-win-id)
                                     (send this get-id)))
+        (displayln (format "got value '~a'" val))
         (send this connect 'input (λ (data)
                                     (ww-debug data)
                                     (let ((js-evt (hash-ref data 'js-evt #f)))
                                       (unless (eq? js-evt #f)
                                         (when (hash-has-key? js-evt 'value)
                                           (inp-set! val (hash-ref js-evt 'value)))))))
+        (displayln "connected")
         (send (send this win) bind 'input (format "#~a" (send this get-id)))
+        (displayln "bind of input?")
         )
       ))
 
@@ -388,6 +392,7 @@
         (ww-debug (format "call to bind ~a ~a ~a" event selector forced-cl))
         (let ((infos (ww-bind win-id event selector)))
           (for-each (λ (info)
+                      (displayln (format "info = ~a" info))
                       (let* ((id (car info))
                              (tag (cadr info))
                              (type (caddr info)))
@@ -404,6 +409,7 @@
       (define/public (bind-inputs)
         (bind 'change 'input )
         (bind 'change 'textarea)
+        #t
         )
 
       (define/public (bind-buttons)

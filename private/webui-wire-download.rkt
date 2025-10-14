@@ -11,8 +11,13 @@
   (provide ww-current-win-release
            ww-download-if-needed
            ww-set-web-wire-location!
+           ww-webui-wire
            )
-           
+
+
+  (define (ww-webui-wire)
+    "/home/hans/src/racket/webui-wire/build/Debug/webui-wire"
+    )
 
   (define ww-current-win-release "https://github.com/hdijkema/web-wire/releases/download/0.1/web-wire-0.1-win64.zip")
   

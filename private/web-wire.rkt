@@ -9,7 +9,8 @@
            "../utils/utils.rkt"
            "css.rkt"
            "menu.rkt"
-           "webui-wire-ffi.rkt"
+           ;"webui-wire-ffi.rkt"
+           "webui-wire-ipc.rkt"
            "webui-wire-download.rkt"
            )
 
@@ -239,41 +240,13 @@
 
   (define (ww-start . args)
     (when (eq? ww-current-handle #f)
-      (let ((existing-h (webwire-current)))
-        (let ((h (make-web-rkt (if (eq? existing-h #f)
-                                  (webwire-new)
-                                  existing-h)
+      (let* ((h (make-web-rkt (webui-ipc event-queuer process-log)
                               #f
                               #f
-                              #f)))
-          (unless (eq? (webwire-status (web-rkt-handle h)) 'valid)
-            (error (format "Invalid handle, cannot start. Reason: ~a"
-                           (webwire-status->string
-                            (webwire-status (web-rkt-handle h))))))
-          (let ((thrd (event-handler h)))
-            ;(webwire-handlers! (web-rkt-handle h)
-            ;                   event-queuer
-            ;                   process-log)
-            (let ((reader-thread (thread (λ ()
-                                           (let loop ()
-                                             (begin
-                                               (sleep 0.01)
-                                               (let ((l (webwire-get (web-rkt-handle h))))
-                                                 (let ((result (car l)))
-                                                   (unless (or (eq? result 'null) (eq? result 'invalid-handle))
-                                                     (let* ((evt (cadr l))
-                                                            (kind (caddr l))
-                                                            (msg (cadddr l)))
-                                                       (unless (eq? evt #f)
-                                                         (event-queuer evt))
-                                                       (unless (eq? kind #f)
-                                                         (process-log kind msg))))))
-                                               (loop)))
-                )
-              )))
-              (set-web-rkt-reader-thread! h reader-thread)
-              (set-web-rkt-event-thread! h thrd)
-              (set! ww-current-handle h))))))
+                              #f))
+             (thrd (event-handler h)))
+        (set-web-rkt-event-thread! h thrd)
+        (set! ww-current-handle h)))
     (unless (null? args)
       (ww-log-level (car args)))
     ww-current-handle)
@@ -288,7 +261,7 @@
                     (let ((handler (hash-ref windows-evt-handlers win-id)))
                       (handler 'destroyed #f)))
                   keys))
-      (webwire-destroy (web-rkt-handle ww-current-handle))
+      ((web-rkt-handle ww-current-handle) "exit")
       (set! ww-current-handle #f)))
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -302,7 +275,7 @@
     #:transparent)
 
   (define-struct cmdr
-    (ok kind win r))
+    (ok kind win r) #:transparent)
 
   ;;;;;;;;;;;; Command Utilities
 
@@ -352,12 +325,10 @@
   (define (ww-cmd cmd)
     (ww-debug (format "ww-cmd ~a" cmd))
     (if (eq? cmd 'quit)
-        (let ((result (webwire-command (web-rkt-handle ww-current-handle) "exit")))
-          (let ((r (convert-result result)))
-            (check-nok cmd r)
-            (ww-stop)
-            r))
-        (let ((result (webwire-command (web-rkt-handle ww-current-handle) cmd)))
+        (begin
+          (ww-stop)
+          #t)
+        (let ((result ((web-rkt-handle ww-current-handle) cmd)))
           (let ((r (convert-result result)))
             (check-nok cmd r)
             r))))
