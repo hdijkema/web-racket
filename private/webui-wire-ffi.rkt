@@ -73,8 +73,10 @@
                (will-register webwire-will
                             handle (λ (handle)
                                      (webwire-destroy handle))))
+             (start-gui-processing)
              handle))
   #:c-id webwire_new)
+
 
 (define-libwebui-wire webwire-current
   (_fun -> (handle : _webui-handle/null)
@@ -82,12 +84,15 @@
              (unless (eq? handle #f)
                (will-register webwire-will
                             handle (λ (handle)
-                                     (webwire-destroy handle))))
+                                     (webwire-destroy handle)))
+               (start-gui-processing)
+               )
              handle))
   #:c-id webwire_current)
 
 (define-libwebui-wire webwire-destroy
-  (_fun _webui-handle/null -> _void)
+  (_fun _webui-handle/null -> _void
+        -> (stop-gui-processing))
   #:c-id webwire_destroy)
 
 (define-libwebui-wire webwire-command
@@ -149,7 +154,7 @@
   #:c-id webwire_status_string)
 
 (define-libwebui-wire webwire-process-gui
-  (_fun _webui-handle/null -> _void)
+  (_fun _webui-handle/null -> _bool)
   #:c-id webwire_process_gui)
 
 
@@ -263,13 +268,32 @@
 
 
 ; Make sure GUI Events are processed (e.g. for linux - gtk main loop)
-(void (thread (λ ()
-                (let loop ()
-                  (begin
-                    (sleep 0.05)
-                    (webwire-process-gui #f)
-                    ;(displayln 'process-gui-ok)
-                    (loop)))
-                )
-              )
-      )
+
+(define gui-processing-thread #f)
+(define gui-processing-go-on #f)
+  
+(define (start-gui-processing)
+  (when (eq? gui-processing-thread #f)
+    (set! gui-processing-go-on #t)
+    (set! gui-processing-thread (thread (λ ()
+                                          (begin
+                                            (displayln "gui processing starts")
+                                            (letrec ((loop (λ ()
+                                                             (sleep 0.05)
+                                                             (let ((processed (webwire-process-gui #f)))
+                                                               (when (or gui-processing-go-on processed)
+                                                                 (loop))))))
+                                              (loop))
+                                            (displayln "gui processing stops")
+                                            (set! gui-processing-thread #f)))))
+    )
+  )
+
+(define (stop-gui-processing)
+  (void (thread (λ ()
+                  (display "waiting 5 seconds")
+                  (sleep 5)
+                  (displayln "stopping gui processing")
+                  (set! gui-processing-go-on #f)))))
+
+  

@@ -193,19 +193,15 @@
       (super-new)
 
       (begin
-        (displayln (format "win-id: ~a, id: ~a" (send this get-win-id) (send this get-id)))
         (inp-set! val (ww-get-value (send this get-win-id)
                                     (send this get-id)))
-        (displayln (format "got value '~a'" val))
         (send this connect 'input (λ (data)
                                     (ww-debug data)
                                     (let ((js-evt (hash-ref data 'js-evt #f)))
                                       (unless (eq? js-evt #f)
                                         (when (hash-has-key? js-evt 'value)
                                           (inp-set! val (hash-ref js-evt 'value)))))))
-        (displayln "connected")
         (send (send this win) bind 'input (format "#~a" (send this get-id)))
-        (displayln "bind of input?")
         )
       ))
 
@@ -392,7 +388,6 @@
         (ww-debug (format "call to bind ~a ~a ~a" event selector forced-cl))
         (let ((infos (ww-bind win-id event selector)))
           (for-each (λ (info)
-                      (displayln (format "info = ~a" info))
                       (let* ((id (car info))
                              (tag (cadr info))
                              (type (caddr info)))
@@ -548,18 +543,11 @@
 
       (define/public (choose-dir caption base-dir)
         (let ((r (ww-choose-dir win-id caption base-dir)))
-          (if (eq? (car r) #f)
+          (ww-debug (format "choose-dir: ~a" r))
+          (if (eq? r 'cmd-nok)
               #f
-              (let ((m (regexp-match re-choose-dir (cdr r))))
-                (if (eq? m #f)
-                    #f
-                    (let ((dir (caddr m)))
-                      (ww-from-string dir))
-                    )
-                )
-              )
-          )
-        )
+              r)))
+            
 
       ; Supers first
       (super-new)

@@ -9,7 +9,7 @@
            "../utils/utils.rkt"
            "css.rkt"
            "menu.rkt"
-           ;"webui-wire-ffi.rkt"
+           "webui-wire-ffi.rkt"
            "webui-wire-ipc.rkt"
            "webui-wire-download.rkt"
            )
@@ -21,6 +21,8 @@
            ww-debug
            ww-error
            ww-display-log
+           ww-tail-log
+           ww-set-log-lines!
 
            ww-cmd
            ww-cmd-nok?
@@ -113,21 +115,21 @@
   ;; web-wire handling (interaction with the library)
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  (define _ww-debug #f)
+  (define _ww-debug #t)
   
   (define (ww-set-debug yn) (set! _ww-debug yn))
 
   (define (do-debug str . var)
     (when _ww-debug
       (if (null? var)
-          (displayln (format "Debug: ~a" str))
-          (displayln (format "Debug: ~a: ~a" (car var) str))
+          (process-log 'WW-DEBUG (format "~a" str))
+          (process-log 'WW-DEBUG (format "~a: ~a" (car var) str))
           )))
 
   (define (err str . var)
     (if (null? var)
-        (displayln (format "Error: ~a" str))
-        (displayln (format "Error: ~a: ~a" var str))
+        (process-log 'WW-ERROR (format "~a" str))
+        (process-log 'WW-ERROR (format "~a: ~a" var str))
         ))
 
   (define-syntax debug
@@ -155,7 +157,6 @@
       ))
   
   (define re-kind #px"([A-Z]+)[(]([0-9]+)[)][:]")
-  ;(define re-event #px"([^:]+)[:]([0-9]+)([:](.*))?")
   (define re-js-event #px"^([^:]+)([:](.*))?")
   (define re-js-result #px"([0-9]+)[:]([^:]+)[:](.*)")
   (define re-js-handle #px"([^:]+)[:]([0-9]+)[:]([0-9]+)([:](.*))?")
@@ -171,6 +172,7 @@
      [event-thread #:mutable]
      [stop-thread #:mutable]
      [reader-thread #:mutable]
+     [type #:mutable]
      )
     )
 
@@ -179,18 +181,27 @@
   (define evt-sem  (make-semaphore))
   (define evt-fifo (make-queue))
   (define log-fifo (make-queue))
-  (define log-fifo-max 100)
+  (define log-fifo-max 2500)
+
+  (define (ww-set-log-lines! n)
+    (set! log-fifo-max (if (< n 10) 10
+                          (if (> n 10000) 10000 n)))
+    (ensure-fifo)
+    )
 
   (define re-event #px"^([^:]+)([:]([^:]+))?")
 
-
-  (define (event-queuer evt)
+  (define (event-queuer-ipc evt)
     (enqueue! evt-fifo evt)
     (semaphore-post evt-sem))
+  
+  (define (event-queuer-ffi  evt)
+    (let ((evt* (bytes->string/utf-8 evt)))
+      (enqueue! evt-fifo evt*)
+      (semaphore-post evt-sem)))
 
-  (define (process-event h evt*)
-    (let* ((evt evt*) ;(bytes->string/utf-8 evt*))
-           (m (regexp-match re-event evt)))
+  (define (process-event h evt)
+    (let* ((m (regexp-match re-event evt)))
       (ww-debug evt)
       (let* ((e (string->symbol (string-downcase (list-ref m 1))))
              (win-id (if (eq? (list-ref m 3) #f) #f (string->number (list-ref m 3))))
@@ -203,7 +214,6 @@
         (if (eq? evt-handler #f)
             (ww-error (format "no event handler to handle event ~a" evt))
             (queue-callback (lambda () (evt-handler e payload))))
-;            (evt-handler e payload))
         )
       )
     )
@@ -220,48 +230,136 @@
            (f))))))
   
 
-  (define (process-log kind* msg*)
-    (define (ensure-fifo)
-      (if (> (queue-length log-fifo) log-fifo-max)
-          (begin
-            (dequeue! log-fifo)
-            (ensure-fifo))
-          (queue-length log-fifo)))
-    (let ((kind kind*) ;(bytes->string/utf-8 kind*))
-          (msg msg*)) ;(bytes->string/utf-8 msg*)))
-      (enqueue! log-fifo (cons kind msg))
+  (define (ensure-fifo)
+    (if (> (queue-length log-fifo) log-fifo-max)
+        (begin
+          (dequeue! log-fifo)
+          (ensure-fifo))
+        (queue-length log-fifo)))
+
+  (define tail-handler #f)
+
+  (define (put-in-fifo kind msg)
+    (enqueue! log-fifo (cons kind msg))
+    (when tail-handler
+      (tail-handler kind msg))
+    )
+
+  (define (process-log-ipc kind msg)
+    (put-in-fifo kind msg)
+    (ensure-fifo))
+
+  (define process-log process-log-ipc)
+  
+  (define (process-log-ffi kind* msg*)
+    (let ((kind (bytes->string/utf-8 kind*))
+          (msg (bytes->string/utf-8 msg*)))
+      (put-in-fifo kind msg)
       (ensure-fifo)))
 
-  (define (ww-display-log)
-    (for-each (λ (item)
-                   (displayln (format "~a - ~a" (car item) (cdr item))))
-              (queue->list log-fifo)))
+  (define (ww-do-display item filter)
+    (let ((displ #f))
+      (when (eq? filter #f)
+        (set! displ #t))
+      (when (symbol? filter)
+        (set! displ (eq? (car item) filter)))
+      (when (regexp? filter)
+        (when (or (regexp-match filter (cdr item))
+                  (regexp-match filter (symbol->string (car item))))
+          (set! displ #t)))
+      (when displ
+        (displayln (format "~a - ~a" (car item) (cdr item)))))
+    )
 
+  (define (ww-display-log . filter*)
+    (let ((filter (if (null? filter*) #f (car filter*))))
+      (when (string? filter)
+        (set! filter (pregexp (string-append "(?i:" filter ")"))))
+      (when (list? filter)
+        (set! filter (pregexp (string-append "(?i:(" (string-join filter "|") "))"))))
+      (for-each (λ (item)
+                  (ww-do-display item filter))
+                (queue->list log-fifo)))
+    )
 
-  (define (ww-start . args)
+  (define (ww-tail-log . args)
+    (let ((last-n 3)
+          (filter #f)
+          (stop-tail #f)
+          )
+      (let ((f (λ ()
+                 (let ((arg (if (null? args) #f (car args))))
+                   (unless (null? args)
+                     (when (boolean? arg)
+                       (when (eq? arg #f)
+                         (set! stop-tail #t)))
+                     (when (number? arg)
+                       (set! last-n (if (< arg 0) 0 arg)))
+                     (when (or (symbol? arg) (regexp? arg) (string? arg) (list? arg))
+                       (set! filter arg)))
+                   (set! args (if (null? args) '() (cdr args)))))))
+        (f)(f))
+      (ww-debug (format "tail log: ~a ~a ~a" last-n filter stop-tail))
+      (if stop-tail
+          (set! tail-handler #f)
+          (let* ((l (queue->list log-fifo))
+                 (len (length l)))
+            (let ((nl (take-right l (if (<= last-n len) last-n len))))
+              (when (string? filter)
+                (set! filter (pregexp (string-append "(?i:" filter ")"))))
+              (when (list? filter)
+                (set! filter (pregexp (string-append "(?i:(" (string-join filter "|") "))"))))
+              (for-each (λ (item)
+                          (ww-do-display item filter))
+                        nl))
+            (set! tail-handler (λ (kind msg)
+                                 (ww-do-display (cons kind msg) filter))))
+          )
+      )
+    )
+
+  (define (ww-start* type args)
     (when (eq? ww-current-handle #f)
-      (let* ((h (make-web-rkt (webui-ipc event-queuer process-log)
-                              #f
-                              #f
-                              #f))
-             (thrd (event-handler h)))
-        (set-web-rkt-event-thread! h thrd)
-        (set! ww-current-handle h)))
+      (let ((h (make-web-rkt (if (eq? type 'ipc)
+                                 (webui-ipc event-queuer-ipc process-log-ipc)
+                                 (let ((existing-h (webwire-current)))
+                                   (if (eq? existing-h #f)
+                                       (webwire-new)
+                                       existing-h)))
+                             #f
+                             #f
+                             #f
+                             type)))
+        (when (eq? type 'ffi)
+          (unless (eq? (webwire-status (web-rkt-handle h)) 'valid)
+            (error (format "Invalid handle, cannot start webui-wire ffi, reason: ~a"
+                           (webwire-status->string (webwire-status (web-rkt-handle h)))))))
+        (let ((thrd (event-handler h)))
+          (when (eq? type 'ffi)
+            (webwire-handlers! (web-rkt-handle h) event-queuer-ffi process-log-ffi))
+          (set-web-rkt-event-thread! h thrd)
+          (set! ww-current-handle h))
+        ))
     (unless (null? args)
       (ww-log-level (car args)))
     ww-current-handle)
 
+  (define (ww-start . args)
+    (ww-start* 'ipc args))
+
   (define (ww-stop)
     (unless (eq? ww-current-handle #f)
-      (let ((thr (web-rkt-event-thread ww-current-handle)))
-        (kill-thread thr))
       ;; inform event handlers of destroying of windows.
       (let ((keys (hash-keys windows-evt-handlers)))
         (for-each (λ (win-id)
                     (let ((handler (hash-ref windows-evt-handlers win-id)))
                       (handler 'destroyed #f)))
                   keys))
-      ((web-rkt-handle ww-current-handle) "exit")
+      (ww-cmd "exit")
+      (let ((thr (web-rkt-event-thread ww-current-handle)))
+        (kill-thread thr))
+      (when (eq? (web-rkt-type ww-current-handle) 'ffi)
+        (webwire-destroy (web-rkt-handle ww-current-handle)))
       (set! ww-current-handle #f)))
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -328,7 +426,11 @@
         (begin
           (ww-stop)
           #t)
-        (let ((result ((web-rkt-handle ww-current-handle) cmd)))
+        (let* ((type (web-rkt-type ww-current-handle))
+               (result (if (eq? type 'ipc)
+                           ((web-rkt-handle ww-current-handle) cmd)
+                           (webwire-command (web-rkt-handle ww-current-handle) cmd)))
+               )
           (let ((r (convert-result result)))
             (check-nok cmd r)
             r))))
@@ -877,26 +979,49 @@
     -> symbol)
     
   ;; Files and directories
-  (define (ww-file-open win-id title dir file-filters)
-    (let ((cmd (format "file-open ~a ~a ~a ~a" win-id
-                       (as-string title)
-                       (as-string dir)
-                       (as-string file-filters))))
-      (ww-cmd cmd)))
+  ;(define (ww-file-open win-id title dir file-filters)
+  ;  (let ((cmd (format "file-open ~a ~a ~a ~a" win-id
+  ;                     (as-string title)
+  ;                     (as-string dir)
+  ;                     (as-string file-filters))))
+  ;    (ww-cmd cmd)))
 
-  (define (ww-file-save win-id title dir file-filters overwrite)
-    (let ((cmd (format "file-save ~a ~a ~a ~a ~a" win-id
-                       (as-string title)
-                       (as-string dir)
-                       (as-string file-filters)
-                       (if overwrite 1 0))))
-      (ww-cmd cmd)))
+  (def-cmd ww-file-open
+    file-open ((win-id ww-win?)
+               (caption string?)
+               (dir string?)
+               (file-filters string?)) ()
+    -> string)
 
-  (define (ww-choose-dir win-id title dir)
-    (let ((cmd (format "choose-dir ~a ~a ~a" win-id
-                       (as-string title)
-                       (as-string dir))))
-      (ww-cmd cmd)))
+  (def-cmd ww-file-save
+    file-save ((win-id ww-win?)
+               (caption string?)
+               (dir string?)
+               (file-filters string?)
+               (overwrite boolean?)
+               ) ()
+    -> string)
+    
+  ;(define (ww-file-save win-id title dir file-filters overwrite)
+  ;  (let ((cmd (format "file-save ~a ~a ~a ~a ~a" win-id
+  ;                     (as-string title)
+  ;                     (as-string dir)
+  ;                     (as-string file-filters)
+  ;                     (if overwrite 1 0))))
+  ;    (ww-cmd cmd)))
+
+  (def-cmd ww-choose-dir
+    choose-dir ((win-id ww-win?)
+                (caption string?)
+                (dir string?)
+                ) ()
+    -> string)
+
+  ;(define (ww-choose-dir win-id title dir)
+  ;  (let ((cmd (format "choose-dir ~a ~a ~a" win-id
+  ;                     (as-string title)
+  ;                     (as-string dir))))
+  ;    (ww-cmd cmd)))
   
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   ;; Finalizing stuff

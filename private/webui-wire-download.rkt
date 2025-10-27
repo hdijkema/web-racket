@@ -14,9 +14,11 @@
            ww-webui-wire
            )
 
+  ;(define (current-release os)
 
   (define (ww-webui-wire)
-    "/home/hans/src/racket/webui-wire/build/Debug/webui-wire"
+    (list "/home/hans/src/racket/webui-wire/build/Release/webui-wire")
+    ;(list "/usr/bin/flatpak" "run" "nl.dijkewijk.webui-wire")
     )
 
   (define ww-current-win-release "https://github.com/hdijkema/web-wire/releases/download/0.1/web-wire-0.1-win64.zip")
