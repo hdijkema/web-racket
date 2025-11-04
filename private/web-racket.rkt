@@ -640,12 +640,12 @@
       (define/override (html-loaded)
         (ww-debug "HTML LOADED")
         (super html-loaded)
-        (let* ((btn (send this element 'app-button)))
-          (send btn connect  'click (λ (data)
-                                      (new test-dialog% [parent this]))))
-        (ww-debug "SETTING MENU")
-        (send this set-menu! test-menu)
-        (send this connect-menu! 'm-quit (λ () (send this close)))
+        ;(let* ((btn (send this element 'app-button)))
+        ;  (send btn connect  'click (λ (data)
+        ;                              (new test-dialog% [parent this]))))
+        ;(ww-debug "SETTING MENU")
+        ;(send this set-menu! test-menu)
+        ;(send this connect-menu! 'm-quit (λ () (send this close)))
         )
 
       (begin

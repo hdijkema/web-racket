@@ -14,6 +14,8 @@
           #t
           #f)))
 
+  ;; This function only expects one character, namely \n
+  ;; In windows disable text mode on stdout/stderr of webui-wire.
   (define (read-eol port)
     (read-string 1 port))
   

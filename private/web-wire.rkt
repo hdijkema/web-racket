@@ -9,7 +9,6 @@
            "../utils/utils.rkt"
            "css.rkt"
            "menu.rkt"
-           "webui-wire-ffi.rkt"
            "webui-wire-ipc.rkt"
            "webui-wire-download.rkt"
            )
@@ -174,6 +173,7 @@
      [reader-thread #:mutable]
      [type #:mutable]
      )
+    #:transparent
     )
 
   (define ww-current-handle #f)
@@ -251,12 +251,6 @@
 
   (define process-log process-log-ipc)
   
-  (define (process-log-ffi kind* msg*)
-    (let ((kind (bytes->string/utf-8 kind*))
-          (msg (bytes->string/utf-8 msg*)))
-      (put-in-fifo kind msg)
-      (ensure-fifo)))
-
   (define (ww-do-display item filter)
     (let ((displ #f))
       (when (eq? filter #f)
@@ -322,21 +316,16 @@
     (when (eq? ww-current-handle #f)
       (let ((h (make-web-rkt (if (eq? type 'ipc)
                                  (webui-ipc event-queuer-ipc process-log-ipc)
-                                 (let ((existing-h (webwire-current)))
-                                   (if (eq? existing-h #f)
-                                       (webwire-new)
-                                       existing-h)))
+                                 (error "ffi integration not implemented"))
                              #f
                              #f
                              #f
                              type)))
         (when (eq? type 'ffi)
-          (unless (eq? (webwire-status (web-rkt-handle h)) 'valid)
-            (error (format "Invalid handle, cannot start webui-wire ffi, reason: ~a"
-                           (webwire-status->string (webwire-status (web-rkt-handle h)))))))
+          (error "ffi integration not implemented"))
         (let ((thrd (event-handler h)))
           (when (eq? type 'ffi)
-            (webwire-handlers! (web-rkt-handle h) event-queuer-ffi process-log-ffi))
+            (error "ffi integration not implemented"))
           (set-web-rkt-event-thread! h thrd)
           (set! ww-current-handle h))
         ))
@@ -355,11 +344,12 @@
                     (let ((handler (hash-ref windows-evt-handlers win-id)))
                       (handler 'destroyed #f)))
                   keys))
-      (ww-cmd "exit")
+      (with-handlers ([exn:fail? (λ (e) #t)])
+        (ww-cmd "exit"))
       (let ((thr (web-rkt-event-thread ww-current-handle)))
         (kill-thread thr))
       (when (eq? (web-rkt-type ww-current-handle) 'ffi)
-        (webwire-destroy (web-rkt-handle ww-current-handle)))
+        (error "ffi integration not implemented"))
       (set! ww-current-handle #f)))
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -429,7 +419,7 @@
         (let* ((type (web-rkt-type ww-current-handle))
                (result (if (eq? type 'ipc)
                            ((web-rkt-handle ww-current-handle) cmd)
-                           (webwire-command (web-rkt-handle ww-current-handle) cmd)))
+                           (error "ffi implementation not implemented")))
                )
           (let ((r (convert-result result)))
             (check-nok cmd r)
@@ -473,6 +463,9 @@
 
   (define (any? v)
     #t)
+
+  (define (path-or-string? s)
+    (or (path? s) (string? s)))
 
   (define (selector? s)
     (or (symbol? s) (string? s)
@@ -522,6 +515,7 @@
       ((eq? type 'ww-win) (make-ww-win (string->number str)))
       ((eq? type 'void) 'void)
       ((eq? type 'css-style) (string->css-style str))
+      ((eq? type 'path) (string->path str))
       (else str)))
 
   (define (check-cmd-type v vname type typename)
@@ -559,6 +553,9 @@
       ((eq? type 'boolean?) (if (eq? v #f) 'false 'true))
       ((eq? type 'symbol-or-string?) v)
       ((eq? type 'number?) v)
+      ((eq? type 'path-or-string?) (if (string? v)
+                                       v
+                                       (path->string v)))
       (else (begin
               (ww-error (format "Convert-arg-to-cmd Unexpected: ~a ~a ~a" vname type v))
               v))))
@@ -726,15 +723,22 @@
   ;; Web Wire Commands
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  
+  ;; Set the log level of webui-wire
   (def-cmd ww-log-level
     loglevel () ((level symbol?)) -> symbol)
+
+  ;; Get the spoken protocol by webui-wire
   (def-cmd ww-protocol
     protocol () () -> int)
+
+  ;; Get/set the current directory of webui-wire
+  (def-cmd ww-cwd
+    cwd () [(path path-or-string?)] -> path)
 
   ;; Global stylesheet
   (def-cmd ww-set-stylesheet
     set-stylesheet ((st stylesheet-or-string?)) () -> void)
+    
   (def-cmd ww-get-stylesheet
     get-stylesheet () () -> stylesheet)
 
