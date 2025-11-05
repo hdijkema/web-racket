@@ -455,6 +455,7 @@
         (ww-set-icon win-id icn))
 
       (define/public (set-html-file! file)
+        (ww-debug (format "set-html-file! ~a" file))
         (set! html-file file)
         (set! html-handle (ww-set-html win-id html-file))
         (ww-debug (format "html file set to ~a" html-file))
@@ -640,12 +641,12 @@
       (define/override (html-loaded)
         (ww-debug "HTML LOADED")
         (super html-loaded)
-        ;(let* ((btn (send this element 'app-button)))
-        ;  (send btn connect  'click (λ (data)
-        ;                              (new test-dialog% [parent this]))))
-        ;(ww-debug "SETTING MENU")
-        ;(send this set-menu! test-menu)
-        ;(send this connect-menu! 'm-quit (λ () (send this close)))
+        (let* ((btn (send this element 'app-button)))
+          (send btn connect  'click (λ (data)
+                                      (new test-dialog% [parent this]))))
+        (ww-debug "SETTING MENU")
+        (send this set-menu! test-menu)
+        (send this connect-menu! 'm-quit (λ () (send this close)))
         )
 
       (begin
