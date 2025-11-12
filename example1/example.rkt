@@ -40,7 +40,7 @@
                                          ))
                         ))
 
-(define test-dialog%
+(define example-1-dialog%
   (class ww-webview%
     (super-new [html-file dialog-html]
                [width 400]
@@ -48,7 +48,7 @@
 
     (define/override (html-loaded)
       (super html-loaded)
-      (ww-debug "html-loaded for test-dialog%")
+      (ww-debug "html-loaded for example-1-dialog%")
       (let* ((btn (send this element 'ok-btn)))
         (send btn connect 'click (λ (data)
                                    (send this close)))))
@@ -73,7 +73,7 @@
       (let* ((dialog-btn (send this element 'app-button))
              )
         (send dialog-btn connect  'click (λ (data)
-                                           (new test-dialog% [parent this])))
+                                           (new example-1-dialog% [parent this])))
         )
       
       (ww-debug "SETTING MENU")
@@ -112,29 +112,38 @@
           (send this connect-menu! 'm-start
                 (λ ()
                   (set! counter-thread
-                        (thread (λ ()
-                                  (letrec ((f (λ ()
-                                                (when go-on-counter
-                                                  (set! c-counter (+ c-counter 1))
-                                                  (send div-counter set-inner-html (format "Count = ~a" c-counter))
-                                                  (when (and (> c-counter 0) (<= c-counter 1))
-                                                    (send div-counter set-style! (css-style '((background white)))))
-                                                  (when (and (> c-counter 100) (<= c-counter 101))
-                                                    (send div-counter set-style! (css-style '((background green) (color white)))))
-                                                  (when (and (> c-counter 200) (<= c-counter 201))
-                                                    (send div-counter set-style! (string->css-style "background: yellow; font-size: 120%;")))
-                                                  (when (and (> c-counter 300) (<= c-counter 301))
-                                                    (send div-counter set-style! (string->css-style "color: white; background: orange; font-size: 130%;")))
-                                                  (when (and (> c-counter 400) (<= c-counter 401))
-                                                    (send div-counter set-style! (string->css-style "color: white; background: red; font-size: 150%; font-weight: bold;")))
-                                                  (sleep 0.01)
-                                                  (f)))))
-                                    (set! go-on-counter #t)
-                                    (f)))))))
+                        (thread
+                         (λ ()
+                           (letrec ((f (λ ()
+                                         (when go-on-counter
+                                           (set! c-counter (+ c-counter 1))
+                                           (send div-counter set-inner-html (format "Count = ~a" c-counter))
+                                           (when (and (> c-counter 0) (<= c-counter 1))
+                                             (send div-counter set-style!
+                                                   (css-style '((background white)))))
+                                           (when (and (> c-counter 100) (<= c-counter 101))
+                                             (send div-counter set-style!
+                                                   (css-style '((background green) (color white)))))
+                                           (when (and (> c-counter 200) (<= c-counter 201))
+                                             (send div-counter set-style!
+                                                   (css-style '((background yellow) (font-size: 120%)))))
+                                           (when (and (> c-counter 300) (<= c-counter 301))
+                                             (send div-counter set-style!
+                                                   (css-style '((color white) (background orange) (font-size 130%)))))
+                                           (when (and (> c-counter 400) (<= c-counter 401))
+                                             (send div-counter set-style!
+                                                   (css-style '((color white) (background red) (font-size 150%) (font-weight bold)))))
+                                           (sleep 0.01)
+                                           (f)))))
+                             (set! go-on-counter #t)
+                             (f)))))))
+          
           (send this connect-menu! 'm-stop
                 (λ ()
                   (set! go-on-counter #f)
                   (set! c-counter 0)))
+
+          (send this connect-menu! 'm-prefs (λ () (new example-1-dialog% [parent this])))
                                      
           )
         )

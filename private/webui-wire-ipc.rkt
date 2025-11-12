@@ -15,6 +15,7 @@
           #t
           #f)))
 
+
   ;; This function only expects one character, namely \n
   ;; In windows disable text mode on stdout/stderr of webui-wire.
   (define (read-eol port)
@@ -62,7 +63,8 @@
     )
 
   (define (webui-ipc event-queuer log-processor)
-    (let ((webui-wire-cmd (ww-get-webui-wire-command)))
+    (let ((webui-wire-cmd (ww-get-webui-wire-command))
+          )
       (call-with-values
        (λ () (process webui-wire-cmd))
        (λ (args)
@@ -72,23 +74,30 @@
                (process-stderr (cadddr args))
                (signal-func (car (cddddr args)))
                )
-           (let ((reader-thrd (process-stderr-reader process-stderr event-queuer log-processor)))
+           (let ((reader-thrd (process-stderr-reader process-stderr event-queuer log-processor))
+                 (sem (make-semaphore 1))
+                 )
              (λ (cmd)
+               (semaphore-wait sem) ; Ensure thread safety
                (displayln cmd process-stdin)
                (flush-output process-stdin)
                (let* ((str-length (read-string 8 process-stdout))
                       (colon (read-string 1 process-stdout)))
-                 ;(displayln (format "len: ~a, str-length: ~a, colon: ~a" (string-length str-length) str-length colon))
                  (unless (and (string? colon)
-                            (string=? colon ":"))
+                              (string=? colon ":"))
+                   (semaphore-post sem)
                    (error "Unexpected input from webui-wire executable"))
                  (let* ((length (string->number str-length))
                         (input (read-string length process-stdout))
                         )
-                 (read-eol process-stdout)
-                   input)))))
-         )))
+                   (read-eol process-stdout)
+                   (semaphore-post sem)
+                   input)))
+             )
+           )
+         )
+       )
+      )
     )
-        
 
-  )
+  ) ; End of module
