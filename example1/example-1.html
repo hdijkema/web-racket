@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<link rel="stylesheet" href="styles.css" />
+	<meta charset="UTF-8" />
+	<title>This is Example 1</title>
+
+	<script>
+		window.setInterval(function() {
+			let el = document.getElementById('pos');
+			el.innerHTML = window.screenX + ", " + window.screenY;
+		}, 250);
+	</script>
+</head>
+<body>
+	<h1>This is Example 1</h1>
+	<p><span id="pos">screen coöords</span></p>
+	<h2>Opening a link to some website</h2>
+	<p>
+	<ul>
+		<li><a href="https://wikipedia.org">To Wikipedia</a></li>
+	</ul>
+	</p>
+	<h2>Opening a second page</h2>
+	<div class="buttons">
+		<button class="btn-1" onclick="window.location.href='example-second.html';">Open the second page using javascript</button>
+		<button class="btn-2"><a href="example-second.html" id="click-url" style="color:green;">Open the second page uring url</a></button>
+	</div>
+	<h2>And some other buttons</h2>
+	<div class="buttons">
+		<button class="btn-2" id="dialog-button">Open a dialog</button>
+		<button class="btn-1" id="select-dir-button">Select a directory</button>
+	</div>
+	<h2>Menu responses</h2>
+	<table>
+		<tr>
+			<td colspan="3" class="counter" id="div-counter">counter = 0</td>
+		</tr>
+		<tr>
+			<td id="div-open">Open</td>
+			<td id="div-close">Close</td>
+			<td></td>
+		</tr>
+		<tr>
+			<td id="div-copy">Copy</td>
+			<td id="div-cut">Cut</td>
+			<td id="div-paste">Paste</td>
+		</tr>
+	</table>
+	<h2>Some inputs</h2>
+	<div style="margin:0.5em; border: 1px solid #909090; padding: 5px;" id="my-id">
+		<p>This is <span id="spanner">replacable</span> text</p>
+		<input type="text" id="input-name" name="input-name" value="a" /><br>
+		<input type="text" id="inp2" value="i2" />
+		<input type="date" id="date-input" /><br>
+		<input type="datetime-local" id="dt-input" />
+		<input type="time" id="time-inp" />
+	</div>
+	<h2>Some pictures</h2>
+	<div id="ff">
+		<img src="ff.jpg" >
+		</div>
+		<div id="f1">
+		<img src="f1.png" />
+	</div>
+</body>
+</html>

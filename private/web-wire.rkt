@@ -26,6 +26,8 @@
            ww-cmd
            ww-cmd-nok?
 
+           ww-cwd
+
            ww-protocol
            ww-log-level
            ww-set-stylesheet
@@ -104,11 +106,20 @@
       (string-replace s* "\\\"" "\"")))
 
   (define (to-server-file html-file)
-    (let* ((path (build-path html-file))
-           (complete-p (path->complete-path path))
-           (a-file (format "~a" complete-p))
-           (the-file (string-replace a-file "\\" "/")))
-      the-file))
+    (let ((to-file (λ (p) (string-replace (format "~a" p) "\\" "/")))
+          (file-path (build-path (format "~a" html-file))))
+      (if (absolute-path? file-path)
+          (to-file file-path)
+          (let* ((cwd (ww-cwd))
+                 (full-file (build-path cwd (format "~a" html-file))))
+            (if (file-exists? full-file)
+                (to-file html-file)
+                (to-file (path->complete-path (build-path html-file)))
+                )
+            )
+          )
+      )
+    )
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   ;; web-wire handling (interaction with the library)
@@ -217,6 +228,8 @@
         )
       )
     )
+
+  (define evt-hdlr 0)
   
   (define (event-handler h)
     (parameterize ([current-eventspace (current-eventspace)])
@@ -225,10 +238,17 @@
          (letrec ((f (lambda ()
                        (semaphore-wait evt-sem)
                        (queue-callback
-                        (lambda () (process-event h (dequeue! evt-fifo))))
+                        (lambda ()
+                          (letrec ((queue-loop (λ ()
+                                                 (when (> (queue-length evt-fifo) 0)
+                                                   (process-event h (dequeue! evt-fifo))
+                                                   (queue-loop)))))
+                            (queue-loop))))
                        (f))))
-           (f))))))
-  
+           (f)))
+       )
+      )
+    )
 
   (define (ensure-fifo)
     (if (> (queue-length log-fifo) log-fifo-max)
@@ -314,6 +334,9 @@
 
   (define (ww-start* type args)
     (when (eq? ww-current-handle #f)
+      (set! evt-sem (make-semaphore))
+      (set! evt-fifo (make-queue))
+      (set! log-fifo (make-queue))
       (let ((h (make-web-rkt (if (eq? type 'ipc)
                                  (webui-ipc event-queuer-ipc process-log-ipc)
                                  (error "ffi integration not implemented"))
@@ -451,7 +474,15 @@
         r)))
 
   (define (html-file-exists? f)
-    (file-exists? f))
+    (if (file-exists? f)
+        #t
+        (let* ((cwd (ww-cwd))
+               (full-file (build-path cwd f)))
+          (ww-debug (format "file-exists? '~a'" full-file))
+          (file-exists? full-file)
+          )
+        )
+    )
 
   (define (html-or-file? v)
     (if (file-exists? v)
@@ -515,15 +546,15 @@
       ((eq? type 'ww-win) (make-ww-win (string->number str)))
       ((eq? type 'void) 'void)
       ((eq? type 'css-style) (string->css-style str))
-      ((eq? type 'path) (string->path str))
+      ((eq? type 'path) (string->path (substring (substring str 0 (- (string-length str) 1)) 1)))
       (else str)))
 
   (define (check-cmd-type v vname type typename)
     (let ((is-type (type v)))
       (unless is-type
         (error
-         (format "Expected ~a of type ~a"
-                 vname typename)))
+         (format "Expected ~a of type ~a, got '~a'"
+                 vname typename v)))
       #t))
 
   (define (convert-arg-to-cmd v vname type)
@@ -793,6 +824,7 @@
   ;; Set inner html of an Id of the HTML in the window
   (def-cmd ww-set-inner-html
     set-inner-html ((win-id ww-win?)
+                    (element-id symbol-or-string?)
                     (html-of-file html-or-file?)) () -> void)
   
 

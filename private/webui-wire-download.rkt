@@ -5,112 +5,151 @@
            net/url
            file/unzip
            racket/file
+           "web-racket-version.rkt"
+           racket/system
            )
 
+  (provide ww-set-custom-webui-wire-command!
+           ww-get-webui-wire-command
+           )
   
-  (provide ww-current-win-release
-           ww-download-if-needed
-           ww-set-web-wire-location!
-           ww-webui-wire
+  
+  (define (ww-get-webui-wire-command)
+    (unless (webui-wire-exists?)
+      (error "webui-wire needs to be installed in order to use web-racket"))
+    (get-webui-wire-cmd))
+
+  (define user-webui-wire-command #f)
+
+  (define (ww-set-custom-webui-wire-command! cmd)
+    (set! user-webui-wire-command cmd)
+    user-webui-wire-command)
+
+  (define (get-webui-wire-cmd)
+    (if (eq? user-webui-wire-command #f)
+        (let ((os (system-type 'os*)))
+          (if (eq? os 'linux)
+              "flatpak run nl.dijkewijk.webui-wire"
+              (format "~a"
+                      (build-path (webui-wire-dir) (if (eq? os 'windows)
+                                                     "webui-wire.exe"
+                                                     "webui-wire")))))
+        user-webui-wire-command))
+          
+  (define (webui-wire-dir)
+    (let* ((cache-dir (find-system-path 'cache-dir))
+           (ww-dir (build-path cache-dir "webui-wire"))
            )
+      (unless (directory-exists? ww-dir)
+        (make-directory ww-dir))
+      ww-dir))
 
-  ;(define (current-release os)
+  (define (flatpak-ok? str)
+    (let* ((re #px"([0-9]+)[.]([0-9]+)[.]([0-9]+)$")
+           (m  (regexp-match re str))
+           (v  (if (eq? m #f)
+                   0
+                   (let ((l (map string->number (cdr m))))
+                     (+ (* (car l) 10000) (* (cadr l) 100) (caddr l))))))
+      (>= 11000)))
 
-  (define (ww-webui-wire)
-    (list "C:/devel/racket/webui-wire/build/Release/webui-wire.exe")
-    ;(list "/home/hans/src/racket/webui-wire/build/Release/webui-wire")
-    ;(list "/usr/bin/flatpak" "run" "nl.dijkewijk.webui-wire")
-    ;(list "/Users/hans/src/webui-wire/build/Release/webui-wire")
+
+  (define (webui-wire-exists?)
+    (let ((os (system-type 'os*)))
+      (if (eq? os 'linux)
+          (webui-wire-exists-linux?)
+          (error "Currently not implemented for other systems than Linux")
+          )
+      )
     )
 
-  (define ww-current-win-release "https://github.com/hdijkema/web-wire/releases/download/0.1/web-wire-0.1-win64.zip")
-  
-  (define user-web-wire-location #f)
 
-  (define (ww-set-web-wire-location! path-or-dir)
-    (set! user-web-wire-location (build-path path-or-dir))
-    user-web-wire-location)
+  (define (webui-wire-exists-linux?)
+    (let ((flatpak (call-with-values (lambda () (process "flatpak --version"))
+                                     (lambda (args)
+                                       (let ((out (car args)))
+                                         (read-line out))))))
+      (unless (string? flatpak)
+        (error "Please install flatpak to use web-racket"))
+      (unless (flatpak-ok? flatpak)
+        (error (format "Not the right flatpak version installed: ~a" flatpak)))
+      (let ((webui-wire (call-with-values (lambda () (process "flatpak list --user | grep webui-wire"))
+                                          (lambda (args)
+                                            (let ((out (car args)))
+                                              (read-line out))))))
+        (if (string? webui-wire)
+            (let ((webui-wire-version (call-with-values (lambda () (process "flatpak run nl.dijkewijk.webui-wire --version"))
+                                                        (lambda (args)
+                                                          (let ((out (car args))
+                                                                (in (cadr args)))
+                                                            (displayln "exit" in)
+                                                            (flush-output in)
+                                                            (read-line out))))))
+              (if (string=? webui-wire-version ww-wire-version)
+                  #t
+                  (begin
+                    (system "flatpak uninstall --user --noninteractive --assumeyes nl.dijkewijk.webui-wire")
+                    (download-webui-wire-linux)))
+              )
+            (download-webui-wire-linux)))
+      )
+    )
 
-  (define (os)
-    (format "~a-~a" (system-type) (system-type 'word)))
 
-  (define (web-wire-exe)
-    (if (eq? (system-type) 'windows)
-        "web-wire.exe"
-        "web-wire"))
+  (define (download-webui-wire-linux)
+    (let* ((download-link (current-webui-wire-link))
+           (filepath (do-download download-link "webui-wire.flatpak")))
+      (system (format "flatpak install --user --assumeyes --noninteractive \"~a\"" filepath))
+      #t
+      )
+    )
 
-  (define (web-wire-dir)
-    (if (eq? user-web-wire-location #f)
-        (let* ((cache-dir (find-system-path 'cache-dir))
-               (os-dir (build-path cache-dir (os)))
-               (web-wire-prg (build-path os-dir (web-wire-exe)))
-               )
-          (unless (file-exists? web-wire-prg)
-            (error "Web wire executable not found: '~a'" web-wire-prg))
-          os-dir)
-        (let ((web-wire-prg (build-path user-web-wire-location (web-wire-exe))))
-          (unless (file-exists? web-wire-prg)
-            (error "Web wire executable not found: '~a'" web-wire-prg))
-          user-web-wire-location)
-        ))
-
-  (define (web-wire-prg)
-    (build-path (web-wire-dir) (web-wire-exe)))
-
-  (define (do-download-and-extract release version os-dir)
-    (let* ((url (string->url release))
+  (define (do-download link filename)
+    (let* ((url (string->url link))
            (port-in (get-pure-port url #:redirections 10))
-           (release-file (build-path os-dir "release.zip"))
-           (port-out (open-output-file release-file #:exists 'replace))
+           (filepath (build-path (webui-wire-dir) filename))
+           (port-out (open-output-file filepath #:exists 'replace))
            )
-      (letrec ((f (lambda (count next-c len)
-                    (let ((bytes (read-bytes 16384 port-in)))
-                      (if (eof-object? bytes)
-                          count
-                          (let ((read-len (bytes-length bytes)))
-                            (when (> read-len 0)
-                              (set! count (+ count read-len))
-                              (when (> count next-c)
-                                (display (format "~a..." count))
-                                (set! next-c (+ count len)))
-                              (write-bytes bytes port-out)
-                              )
-                            (f count next-c len)))))
-                  ))
-        (display "Downloading web-wire...")
-        (let ((count (f 0 0 10000000)))
+      (letrec ((downloader-func (λ (count next-c len)
+                                  (let ((bytes (read-bytes 16384 port-in)))
+                                    (if (eof-object? bytes)
+                                        count
+                                        (let ((read-len (bytes-length bytes)))
+                                          (when (> read-len 0)
+                                            (set! count (+ count read-len))
+                                            (when (> count next-c)
+                                              (display (format "~a..." count))
+                                              (set! next-c (+ count len)))
+                                            (write-bytes bytes port-out)
+                                            )
+                                          (downloader-func count next-c len)))))
+                                ))
+        (display (format "Downloading webui-wire (~a)..." link))
+        (let ((count (downloader-func 0 0 10000)))
           (displayln (format "~a downloaded" count)))
         (close-input-port port-in)
         (close-output-port port-out)
-        (display "Unzipping...")
-        (unzip release-file
-               (make-filesystem-entry-reader #:dest os-dir
-                                             #:strip-count 1
-                                             #:exists 'replace)
-               )
-        (display "removing zip file...")
-        (delete-file release-file)
-        (displayln "done")
-        )))
+        filepath)))
 
-  (define (ww-download-if-needed release)
-    (let* ((os-dir (web-wire-dir))
-           (re #px"web[-]wire[-]([0-9.]+)[-]")
+  (define (current-webui-wire-link)
+    (let* ((os (system-type 'os*))
+           (arch (system-type 'arch))
            )
-      (unless (directory-exists? os-dir)
-        (make-directory* os-dir))
-      (let ((m (regexp-match re release)))
-        (unless (eq? m #f)
-          (let* ((version-file (build-path os-dir "version"))
-                 (version (cadr m))
-                 (has-version #f))
-            (when (file-exists? version-file)
-              (let ((file-version (file->value version-file)))
-                (when (string=? file-version version)
-                  (set! has-version #t))))
-            (unless has-version
-              (do-download-and-extract release version os-dir)
-              (write-to-file version version-file)
-              ))
-          ))))  
+      (when (eq? os #f)
+        (error "Operating system not automatically supported by webui-wire, you can compile it yourself and use 'ww-set-custom-webui-wire-command!'"))
+      (let ((os-str (symbol->string os))
+            (arch-str (symbol->string arch))
+            (ext (if (eq? os 'linux)
+                     ".flatpak"
+                     (if (eq? os 'win64)
+                         ".exe"
+                         ""))))
+        (string-append "https://github.com/hdijkema/webui-wire/releases/download/v"
+                       ww-wire-version "/webui-wire-v" ww-wire-version
+                       "-" os-str "-" arch-str ext)
+        )
+      )
+    )
+
+
   )

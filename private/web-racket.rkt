@@ -5,16 +5,18 @@
            "css.rkt"
            "menu.rkt"
            "../utils/sprintf.rkt"
+           "webui-wire-download.rkt"
            html-printer
            (prefix-in g: gregor)
            (prefix-in g: gregor/time)
            gregor-utils
            net/sendurl
+           racket/path
            )
   
   (provide ww-element%
            ww-input%
-           ww-window%
+           ww-webview%
 
            ww-start
            ww-stop
@@ -23,6 +25,11 @@
            ww-error
 
            (all-from-out "css.rkt")
+           (all-from-out "menu.rkt")
+
+           ww-set-custom-webui-wire-command!
+           ww-display-log
+           ww-tail-log
            )
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -232,7 +239,6 @@
       ))
 
   ;;;; Time input
-
   (define ww-input-time%
     (class ww-input%
 
@@ -283,7 +289,12 @@
       (super-new)
       ))
 
-  (define ww-window%
+
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; Classes representing WebView Windows. 
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  
+  (define ww-webview%
     (class object%
       
       (init-field [profile 'default-profile]
@@ -455,11 +466,19 @@
         (ww-set-icon win-id icn))
 
       (define/public (set-html-file! file)
-        (ww-debug (format "set-html-file! ~a" file))
-        (set! html-file file)
-        (set! html-handle (ww-set-html win-id html-file))
-        (ww-debug (format "html file set to ~a" html-file))
-        )
+        (let* ((full-path (if (string? file)
+                              (string->path file)
+                              file))
+               (folder (path-only full-path))
+               (the-file (file-name-from-path full-path))
+               )
+          (ww-debug (format "set-html-file! ~a, ~a" folder the-file))
+          (set! html-file file)
+          (when folder 
+            (ww-cwd folder))
+          (set! html-handle (ww-set-html win-id the-file))
+          (ww-debug (format "html file set to ~a" the-file))
+          ))
 
       (define/public (set-url url)
         (send-url url))
@@ -578,8 +597,19 @@
         (hash-set! windows-evt-handlers (ww-win-id win-id) event-handler)
         (hash-set! windows (ww-win-id win-id) this)
 
-        (ww-move win-id x y)
         (ww-resize win-id width height)
+
+        (when parent
+            (let* ((parent-width (send parent get-width))
+                   (parent-height (send parent get-height))
+                   (parent-x (send parent get-x))
+                   (parent-y (send parent get-y))
+                   )
+              (set! x (+ parent-x (/ (- parent-width width) 2)))
+              (set! y (+ parent-y (/ (- parent-height height) 2)))
+              )
+          )
+        (ww-move win-id x y)
         
         (send this set-title! title)
         
@@ -601,57 +631,6 @@
   (define (get-global-stylesheet)
     (ww-get-stylesheet))
 
-
-  
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; Testing stuff
-  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-  (define test-menu (menu (menu-item 'm-file "File"
-                             #:submenu
-                             (menu (menu-item 'm-open "Open File")
-                                   (menu-item 'm-close "Close File")
-                                   (menu-item 'm-quit "Quit" #:separator #t)))
-                  (menu-item 'm-edit "Edit"
-                             #:submenu
-                             (menu (menu-item 'm-copy "Copy")
-                                   (menu-item 'm-cut  "Cut")
-                                   (menu-item 'm-paste "Paste")
-                                   (menu-item 'm-prefs "Preferences" #:separator #t)
-                                   ))))
-
-  (define test-dialog%
-    (class ww-window%
-      (super-new [html-file "../../web-wire/test/dialog.html"]
-                 [width 400]
-                 [height 300])
-
-      (define/override (html-loaded)
-        (super html-loaded)
-        (ww-debug "html-loaded for test-dialog%")
-        (let* ((btn (send this element 'ok-btn)))
-          (send btn connect 'click (λ (data)
-                                     (send this close)))))
-      ))
-
-  (define test-window%
-    (class ww-window%
-      (super-new [html-file "../../web-wire/test/test1.html"])
-
-      (define/override (html-loaded)
-        (ww-debug "HTML LOADED")
-        (super html-loaded)
-        (let* ((btn (send this element 'app-button)))
-          (send btn connect  'click (λ (data)
-                                      (new test-dialog% [parent this]))))
-        (ww-debug "SETTING MENU")
-        (send this set-menu! test-menu)
-        (send this connect-menu! 'm-quit (λ () (send this close)))
-        )
-
-      (begin
-        )
-      )
-    )
-    
+ 
+ 
   ); end of module

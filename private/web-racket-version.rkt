@@ -6,10 +6,10 @@
            ww-version-major
            ww-version-minor
            ww-version-patch
-           ww-ffi-version
-           ww-ffi-version-major
-           ww-ffi-version-minor
-           ww-ffi-version-patch
+           ww-wire-version
+           ww-wire-version-major
+           ww-wire-version-minor
+           ww-wire-version-patch
            )
 
 
@@ -36,10 +36,10 @@
   ;; Web Wire FFI Version
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   
-  (define ww-ffi-version-major 0)
-  (define ww-ffi-version-minor 2)
-  (define ww-ffi-version-patch 1)
+  (define ww-wire-version-major 0)
+  (define ww-wire-version-minor 2)
+  (define ww-wire-version-patch 8)
 
-  (define ww-ffi-version (mk-version ww-ffi-version-major ww-ffi-version-minor ww-ffi-version-patch))
+  (define ww-wire-version (mk-version ww-wire-version-major ww-wire-version-minor ww-wire-version-patch))
 
   )
