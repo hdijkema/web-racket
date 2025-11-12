@@ -1,0 +1,54 @@
+body {
+	font-family: Arial;
+	font-size: 11pt;
+}
+
+h1 {
+	color: #303030;
+}
+
+h1:hover {
+	color: #606060;
+}
+
+a {
+	text-decoration: none;
+}
+
+button.btn-1 {
+	background: #1adb4e;
+	border: 1px solid black;
+	padding: 1em;
+}
+
+button.btn-2 {
+	color: white;
+	background: #3e5c46;
+	border: 1px solid green;
+	padding: 1em;
+	margin-left: 1em;
+}
+
+button.btn-2 a {
+	color: white;
+}
+
+table {
+	margin: 1em;
+	border: 1px solid black;
+	border-collapse: collapse;
+}
+
+table td {
+	border: 1px solid #909090;
+	padding: 0.5em;
+	width: 70%;
+}
+
+table th {
+	border-collapse: collapse;
+	border: 1px solid #909090;
+	padding: 0.5em;
+	width: 30%;
+}
+

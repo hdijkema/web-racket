@@ -31,7 +31,7 @@
     (
      [style #:auto #:mutable]
      )
-    #:auto-value (make-hash)
+    #:auto-value #f
     #:transparent)
 
   (define-struct css-stylesheet
@@ -42,6 +42,7 @@
     #:transparent)
 
   (define st-style style-style)
+  (define st-style! set-style-style!)
   (define make-st make-style)
   (define st? style?)
   (define stylesheet? css-stylesheet?)
@@ -53,14 +54,15 @@
     (if (symbol? style_or_styles)
         (let ((css (if (null? args) "" (car args)))
               (st (make-st)))
+          (st-style! st (make-hash))
           (hash-set! (st-style st) style_or_styles css)
           st)
         (let* ((st (make-st))
-               (h (st-style st)))
+               (h (begin (st-style! st (make-hash)) (st-style st))))
           (for-each (lambda (st)
                       (let ((entry (car st))
                             (css (cadr st)))
-                        (hash-set! h entry css)))
+                        (hash-set! h entry (format "~a" css))))
                     style_or_styles)
           st)))
 

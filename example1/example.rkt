@@ -93,7 +93,11 @@
              (counter-thread #f)
              )
         (send this set-menu! test-menu)
-        (send this connect-menu! 'm-quit (λ () (send this close)))
+        (send this connect-menu! 'm-quit
+              (λ ()
+                (set! go-on-counter #f)
+                (send this close))
+              )
         (let ((make-menu-executor (λ (item elem string count)
                                     (send this connect-menu! item
                                           (λ ()
@@ -113,13 +117,24 @@
                                                 (when go-on-counter
                                                   (set! c-counter (+ c-counter 1))
                                                   (send div-counter set-inner-html (format "Count = ~a" c-counter))
+                                                  (when (and (> c-counter 0) (<= c-counter 1))
+                                                    (send div-counter set-style! (css-style '((background white)))))
+                                                  (when (and (> c-counter 100) (<= c-counter 101))
+                                                    (send div-counter set-style! (css-style '((background green) (color white)))))
+                                                  (when (and (> c-counter 200) (<= c-counter 201))
+                                                    (send div-counter set-style! (string->css-style "background: yellow; font-size: 120%;")))
+                                                  (when (and (> c-counter 300) (<= c-counter 301))
+                                                    (send div-counter set-style! (string->css-style "color: white; background: orange; font-size: 130%;")))
+                                                  (when (and (> c-counter 400) (<= c-counter 401))
+                                                    (send div-counter set-style! (string->css-style "color: white; background: red; font-size: 150%; font-weight: bold;")))
                                                   (sleep 0.01)
                                                   (f)))))
                                     (set! go-on-counter #t)
                                     (f)))))))
           (send this connect-menu! 'm-stop
                 (λ ()
-                  (set! go-on-counter #f)))
+                  (set! go-on-counter #f)
+                  (set! c-counter 0)))
                                      
           )
         )
