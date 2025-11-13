@@ -56,12 +56,15 @@
 
   (define (webui-wire-exists?)
     (let ((os (system-type 'os*)))
-      (if (eq? os 'linux)
-          (webui-wire-exists-linux?)
-          (error
-           (format
-            "Currently not implemented operating system '~a'" os))
-          )
+      (cond [(eq? os 'linux)
+             (webui-wire-exists-linux?)]
+            [(eq? os 'windows)
+             (webui-wire-exists-windows?)]
+            [else
+             (error
+              (format
+               "Currently not implemented operating system '~a'" os))]
+            )
       )
     )
 
@@ -97,11 +100,27 @@
       )
     )
 
+  (define (webui-wire-exists-windows?)
+    (let ((webui-wire-exe (get-webui-wire-cmd 'windows)))
+      (if (file-exists? webui-wire-exe)
+          #t
+          (download-webui-wire-windows))
+      )
+    )
+
 
   (define (download-webui-wire-linux)
     (let* ((download-link (current-webui-wire-link))
            (filepath (do-download download-link "webui-wire.flatpak")))
       (system (format "flatpak install --user --assumeyes --noninteractive \"~a\"" filepath))
+      #t
+      )
+    )
+
+  (define (download-webui-wire-windows)
+    (let* ((download-link (current-webui-wire-link))
+           (filepath (do-download download-link "webui-wire.exe")))
+      (displayln filepath)
       #t
       )
     )
