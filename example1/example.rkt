@@ -70,9 +70,9 @@
       (super html-loaded)
 
       (ww-debug "CONNECTING BUTTONS")
-      (let* ((dialog-btn (send this element 'app-button))
+      (let* ((dialog-btn (send this element 'dialog-button))
              )
-        (send dialog-btn connect  'click (λ (data)
+        (send dialog-btn connect 'click (λ (data)
                                            (new example-1-dialog% [parent this])))
         )
       
