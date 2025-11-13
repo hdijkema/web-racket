@@ -155,10 +155,10 @@
       (define/public (show-inline)
         (send this display "inline-block"))
 
-      (define/public (set-inner-html html-or-sexpr)
+      (define/public (set-inner-html! html-or-sexpr)
         (if (string? html-or-sexpr)
             (ww-set-inner-html win-id id html-or-sexpr)
-            (set-inner-html (xexpr->html5 html-or-sexpr))))
+            (set-inner-html! (xexpr->html5 html-or-sexpr))))
 
       (super-new)
       )
@@ -342,7 +342,7 @@
                               (set! x x*)
                               (set! y y*)
                               ))
-          ([eq? evt 'request-close] (when (send this can-close?)
+          ([eq? evt 'close-request] (when (send this can-close?)
                                       (send this close)))
           ([eq? evt 'menu-item-choosen] (let* ((menu-id (string->symbol (hash-ref content 'item)))
                                                (cb (hash-ref menu-cbs menu-id #f)))

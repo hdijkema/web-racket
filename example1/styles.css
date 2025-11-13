@@ -52,3 +52,8 @@ table th {
 	width: 30%;
 }
 
+td span.counter {
+	padding: 1em;
+	border: 1px solid grey;
+}
+

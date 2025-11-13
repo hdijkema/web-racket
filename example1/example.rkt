@@ -17,14 +17,11 @@
 (define-runtime-path html-start "example-1.html")
 (define-runtime-path dialog-html "example-1-dialog.html")
 
-(displayln html-start)
-(displayln dialog-html)
-
-
 (define test-menu (menu (menu-item 'm-file "File"
                                    #:submenu
                                    (menu (menu-item 'm-open "Open File")
                                          (menu-item 'm-close "Close File")
+                                         (menu-item 'm-select-dir "Select Folder" #:separator #t)
                                          (menu-item 'm-quit "Quit" #:separator #t)))
                         (menu-item 'm-edit "Edit"
                                    #:submenu
@@ -63,17 +60,103 @@
 
 (define example-1-window%
   (class ww-webview%
-    (super-new [html-file (begin (displayln html-start) html-start)])
+    (define go-on-counter #f)
+    (define c-counter 0)
+    (define counter-inc 1)
+    (define counter-thread #f)
+    (define div-counter #f)
+    (define my-dir ".")
+    
+    (super-new [html-file html-start])
+
+    (define/override (can-close?)
+      (eq? counter-thread #f))
+
+    (define/public (reset-counter)
+      (set! go-on-counter #f)
+      (set! counter-thread #f)
+      )
+
+    (define/public (inc-counter)
+      (set! c-counter (+ c-counter counter-inc))
+      (when (>= c-counter 1000)
+        (set! counter-inc -1))
+      (when (<= c-counter 0)
+        (set! counter-inc 1))
+      (send this update-counter))
+
+    (define/public (update-counter)
+      (send div-counter set-inner-html! (format "Count = ~a" c-counter))
+      (when (and (> c-counter 0) (<= c-counter 100))
+        (send div-counter set-style!
+              (css-style '((background white)))))
+      (when (and (> c-counter 100) (<= c-counter 200))
+        (send div-counter set-style!
+              (css-style '((background green) (color white)))))
+      (when (and (> c-counter 200) (<= c-counter 300))
+        (send div-counter set-style!
+              (css-style '((background yellow) (font-size: 120%)))))
+      (when (and (> c-counter 300) (<= c-counter 400))
+        (send div-counter set-style!
+              (css-style '((color white) (background orange) (font-size 110%)))))
+      (when (and (> c-counter 400))
+        (send div-counter set-style!
+              (css-style '((color white) (background red) (font-size 120%) (font-weight bold)))))
+      )
+
+    (define/public (set-folder new-dir)
+      (set! my-dir new-dir)
+      (let ((el (send this element 'folder)))
+        (send el set-inner-html! (format "Selected folder: <b>~a</b>" my-dir))
+        )
+      )
+      
+
+    (define/public (start-counter)
+      (set! counter-thread
+            (thread
+             (λ ()
+               (letrec ((f (λ ()
+                             (when go-on-counter
+                               (send this inc-counter)
+                               (sleep 0.01)
+                               (f)))))
+                 (set! go-on-counter #t)
+                 (f)))))
+      )
+
+    (define/override (handle-navigate url type kind)
+      (send this reset-counter)
+      (super handle-navigate url type kind))
 
     (define/override (html-loaded)
       (ww-debug "HTML LOADED")
       (super html-loaded)
 
+      (set! div-counter (send this element 'div-counter))
+      (send this update-counter)
+      (send this set-folder my-dir)
+
       (ww-debug "CONNECTING BUTTONS")
       (let* ((dialog-btn (send this element 'dialog-button))
+             (start-stop-btn (send this element 'start-stop-button))
              )
-        (send dialog-btn connect 'click (λ (data)
-                                           (new example-1-dialog% [parent this])))
+        (send dialog-btn connect 'click
+              (λ (data)
+                (new example-1-dialog% [parent this])))
+        
+        (send start-stop-btn connect 'click
+              (λ (data)
+                (if (eq? counter-thread #f)
+                    (begin
+                      (send this start-counter)
+                      (send start-stop-btn set-inner-html! "Stop Counter"))
+                    (begin
+                      (send this reset-counter)
+                      (send start-stop-btn set-inner-html! "Start Counter"))
+                    )
+                )
+              )
         )
       
       (ww-debug "SETTING MENU")
@@ -87,21 +170,18 @@
              (c-cut 0)
              (div-paste (send this element 'div-paste))
              (c-paste 0)
-             (div-counter (send this element 'div-counter))
-             (go-on-counter #f)
-             (c-counter 0)
-             (counter-thread #f)
              )
+        
         (send this set-menu! test-menu)
         (send this connect-menu! 'm-quit
               (λ ()
-                (set! go-on-counter #f)
+                (send this reset-counter)
                 (send this close))
               )
         (let ((make-menu-executor (λ (item elem string count)
                                     (send this connect-menu! item
                                           (λ ()
-                                            (send elem set-inner-html (format "~a ~a" string (count)))))))
+                                            (send elem set-inner-html! (format "~a ~a" string (count)))))))
               )
           (make-menu-executor 'm-open div-open "Open file" (inc c-open))
           (make-menu-executor 'm-close div-close "Close file" (inc c-close))
@@ -110,40 +190,19 @@
           (make-menu-executor 'm-paste div-paste "Edit Paste" (inc c-paste))
 
           (send this connect-menu! 'm-start
-                (λ ()
-                  (set! counter-thread
-                        (thread
-                         (λ ()
-                           (letrec ((f (λ ()
-                                         (when go-on-counter
-                                           (set! c-counter (+ c-counter 1))
-                                           (send div-counter set-inner-html (format "Count = ~a" c-counter))
-                                           (when (and (> c-counter 0) (<= c-counter 1))
-                                             (send div-counter set-style!
-                                                   (css-style '((background white)))))
-                                           (when (and (> c-counter 100) (<= c-counter 101))
-                                             (send div-counter set-style!
-                                                   (css-style '((background green) (color white)))))
-                                           (when (and (> c-counter 200) (<= c-counter 201))
-                                             (send div-counter set-style!
-                                                   (css-style '((background yellow) (font-size: 120%)))))
-                                           (when (and (> c-counter 300) (<= c-counter 301))
-                                             (send div-counter set-style!
-                                                   (css-style '((color white) (background orange) (font-size 130%)))))
-                                           (when (and (> c-counter 400) (<= c-counter 401))
-                                             (send div-counter set-style!
-                                                   (css-style '((color white) (background red) (font-size 150%) (font-weight bold)))))
-                                           (sleep 0.01)
-                                           (f)))))
-                             (set! go-on-counter #t)
-                             (f)))))))
+                (λ () (send this start-counter)))
           
           (send this connect-menu! 'm-stop
-                (λ ()
-                  (set! go-on-counter #f)
-                  (set! c-counter 0)))
+                (λ () (send this reset-counter)))
 
-          (send this connect-menu! 'm-prefs (λ () (new example-1-dialog% [parent this])))
+          (send this connect-menu! 'm-prefs
+                (λ () (new example-1-dialog% [parent this])))
+
+          (send this connect-menu! 'm-select-dir
+                (λ ()
+                  (let ((new-dir (send this choose-dir "Select a folder" my-dir)))
+                    (unless (eq? new-dir #f)
+                      (send this set-folder new-dir)))))
                                      
           )
         )
