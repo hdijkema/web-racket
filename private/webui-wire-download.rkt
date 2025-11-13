@@ -11,8 +11,13 @@
 
   (provide ww-set-custom-webui-wire-command!
            ww-get-webui-wire-command
+           ww-get-webui-wire-version
            )
-  
+
+
+  (define (ww-get-webui-wire-version)
+    (ww-get-webui-wire-command)
+    (get-webui-wire-installed-version))
   
   (define (ww-get-webui-wire-command)
     (unless (webui-wire-exists?)

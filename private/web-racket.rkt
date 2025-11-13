@@ -28,6 +28,7 @@
            (all-from-out "menu.rkt")
 
            ww-set-custom-webui-wire-command!
+           ww-get-webui-wire-version
            ww-display-log
            ww-tail-log
            )
