@@ -3,10 +3,10 @@
   (require setup/dirs
            net/sendurl
            net/url
-           file/unzip
            racket/file
            "web-racket-version.rkt"
            racket/system
+           racket/string
            )
 
   (provide ww-set-custom-webui-wire-command!
@@ -27,14 +27,27 @@
 
   (define (get-webui-wire-cmd)
     (if (eq? user-webui-wire-command #f)
-        (let ((os (system-type 'os*)))
+        (let ((os (get-os)))
           (if (eq? os 'linux)
               "flatpak run nl.dijkewijk.webui-wire"
               (format "~a"
-                      (build-path (webui-wire-dir) (if (eq? os 'windows)
+                      (build-path (webui-wire-dir) (if (eq? os 'win64)
                                                      "webui-wire.exe"
                                                      "webui-wire")))))
         user-webui-wire-command))
+
+  (define (get-webui-wire-installed-version)
+    (let* ((cmd (get-webui-wire-cmd))
+           (result (call-with-values (λ () (process (format "~a --version" cmd)))
+                                     (λ (args)
+                                       (let ((out (car args))
+                                             (in (cadr args)))
+                                         (displayln "exit" in)
+                                         (flush-output in)
+                                         (read-line out)))))
+           (result-str (string-trim (format "~a" result)))
+           )
+      result-str))
           
   (define (webui-wire-dir)
     (let* ((cache-dir (find-system-path 'cache-dir))
@@ -55,10 +68,10 @@
 
 
   (define (webui-wire-exists?)
-    (let ((os (system-type 'os*)))
+    (let ((os (get-os)))
       (cond [(eq? os 'linux)
              (webui-wire-exists-linux?)]
-            [(eq? os 'windows)
+            [(eq? os 'win64)
              (webui-wire-exists-windows?)]
             [else
              (error
@@ -83,13 +96,7 @@
                                             (let ((out (car args)))
                                               (read-line out))))))
         (if (string? webui-wire)
-            (let ((webui-wire-version (call-with-values (lambda () (process "flatpak run nl.dijkewijk.webui-wire --version"))
-                                                        (lambda (args)
-                                                          (let ((out (car args))
-                                                                (in (cadr args)))
-                                                            (displayln "exit" in)
-                                                            (flush-output in)
-                                                            (read-line out))))))
+            (let ((webui-wire-version (get-webui-wire-installed-version)))
               (if (string=? webui-wire-version ww-wire-version)
                   #t
                   (begin
@@ -101,9 +108,12 @@
     )
 
   (define (webui-wire-exists-windows?)
-    (let ((webui-wire-exe (get-webui-wire-cmd 'windows)))
+    (let ((webui-wire-exe (get-webui-wire-cmd)))
       (if (file-exists? webui-wire-exe)
-          #t
+          (let ((webui-wire-version (get-webui-wire-installed-version)))
+            (if (string=? webui-wire-version ww-wire-version)
+                #t
+                (download-webui-wire-windows)))
           (download-webui-wire-windows))
       )
     )
@@ -153,8 +163,8 @@
         filepath)))
 
   (define (current-webui-wire-link)
-    (let* ((os (system-type 'os*))
-           (arch (system-type 'arch))
+    (let* ((os (get-os))
+           (arch (get-arch))
            )
       (when (eq? os #f)
         (error "Operating system not automatically supported by webui-wire, you can compile it yourself and use 'ww-set-custom-webui-wire-command!'"))
@@ -171,6 +181,16 @@
         )
       )
     )
+
+
+  (define (get-os)
+    (let ((os (system-type 'os*)))
+      (if (eq? os 'windows)
+          'win64
+          os)))
+
+  (define (get-arch)
+    (system-type 'arch))
 
 
   )
