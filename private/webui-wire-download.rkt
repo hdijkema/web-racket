@@ -58,7 +58,9 @@
     (let ((os (system-type 'os*)))
       (if (eq? os 'linux)
           (webui-wire-exists-linux?)
-          (error "Currently not implemented for other systems than Linux")
+          (error
+           (format
+            "Currently not implemented operating system '~a'" os))
           )
       )
     )
