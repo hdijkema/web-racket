@@ -17,6 +17,9 @@
   (provide ww-element%
            ww-input%
            ww-webview%
+           ww-webview-dialog%
+           ww-settings%
+           ww-webview-message%
 
            ww-start
            ww-stop
@@ -178,10 +181,16 @@
   (define ww-input%
     (class ww-element%
 
+      (define cb #f)
       (define val #f)
 
       (define/public (get)
         val)
+
+      (define/public (on-change! callback)
+        (inp-set! cb callback)
+        (cb val)
+        )
 
       (define/public (set! v)
         (inp-set! val v)
@@ -204,11 +213,15 @@
         (inp-set! val (ww-get-value (send this get-win-id)
                                     (send this get-id)))
         (send this connect 'input (λ (data)
-                                    (ww-debug data)
-                                    (let ((js-evt (hash-ref data 'js-evt #f)))
+                                    (let ((js-evt (hash-ref data 'js_evt #f)))
                                       (unless (eq? js-evt #f)
                                         (when (hash-has-key? js-evt 'value)
-                                          (inp-set! val (hash-ref js-evt 'value)))))))
+                                          (let ((v (hash-ref js-evt 'value)))
+                                            (inp-set! val v)
+                                            (unless (eq? cb #f)
+                                              (cb v))
+                                            ))))
+                                    ))
         (send (send this win) bind 'input (format "#~a" (send this get-id)))
         )
       ))
@@ -299,14 +312,15 @@
     (class object%
       
       (init-field [profile 'default-profile]
+                  [settings #f]
                   [use-browser #f]
                   [parent-id #f]
                   [parent #f]
                   [title "Racket HTML Window"]
-                  [x _std_x]
-                  [y _std_y]
-                  [width _std_w]
-                  [height _std_h]
+                  [x (if (eq? settings #f) _std_x (send settings get 'window-x _std_x))]
+                  [y (if (eq? settings #f) _std_y (send settings get 'window-y _std_y))]
+                  [width (if (eq? settings #f) _std_w (send settings get 'window-width _std_w))]
+                  [height (if (eq? settings #f) _std_h (send settings get 'window-height _std_h))]
                   [icon #f]
                   [menu #f]
                   [html-file #f]
@@ -317,6 +331,11 @@
       (define menu-cbs (make-hash))
       (define elements (make-hash))
       (define html-handle #f)
+
+      (define/public (clone-settings section)
+        (if (eq? settings #f)
+            #f
+            (send settings clone section)))
       
       (define (event-handler evt content)
         (ww-debug (format "win-id=~a '~a ~a" win-id evt content))
@@ -335,12 +354,19 @@
                                      (height* (hash-ref content 'height))
                                      )
                                 (set! width width*)
-                                (set! height height*)))
+                                (set! height height*)
+                                (unless (eq? settings #f)
+                                  (send settings set 'window-width width)
+                                  (send settings set 'window-height height))
+                                ))
           ([eq? evt 'moved] (let* ((x* (hash-ref content 'x))
                                    (y* (hash-ref content 'y))
                                    )
                               (set! x x*)
                               (set! y y*)
+                              (unless (eq? settings #f)
+                                (send settings set 'window-x x)
+                                (send settings set 'window-y y))
                               ))
           ([eq? evt 'close-request] (when (send this can-close?)
                                       (send this close)))
@@ -477,9 +503,19 @@
           (set! html-file file)
           (when folder 
             (ww-cwd folder))
-          (set! html-handle (ww-set-html win-id the-file))
+          (set! html-handle (ww-set-html-file win-id the-file))
           (ww-debug (format "html file set to ~a" the-file))
           ))
+
+      (define/public (set-html html)
+        (let* ((tmpfile "/tmp/test.html")
+               (fh (open-output-file tmpfile #:exists 'replace)))
+          (displayln tmpfile)
+          (display html fh)
+          (close-output-port fh)
+          (send this set-html-file! tmpfile)
+          )
+        )
 
       (define/public (set-url url)
         (send-url url))
@@ -568,13 +604,17 @@
           (if (eq? r 'cmd-nok)
               #f
               r)))
-            
+
+      (define/public (inherit-checks)
+        #t)
 
       ; Supers first
       (super-new)
 
       ; construct
       (begin
+        (send this inherit-checks)
+        
         (when (= (hash-count windows) 0)
           (ww-start))
 
@@ -626,12 +666,54 @@
 
     ))
 
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; Classes representing WebView Dialogs
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  (define ww-webview-dialog%
+    (class ww-webview%
+      (super-new)
+
+      (inherit-field parent)
+
+      (define/override (inherit-checks)
+        (when (eq? parent #f)
+          (error "A parent must be given")))
+      ))
+
+
+  (define ww-webview-message%
+    (class ww-webview-dialog%
+      (super-new)
+
+      (send this set-html
+            "<html><head><title>Message</title></head><body><h3 id=\"msg\">[msg]</h3><p id=\"submsg\">[submsg]</p></body></html>"
+            )
+      )
+    )
+
   (define (set-global-stylesheet st)
     (ww-set-stylesheet st))
 
   (define (get-global-stylesheet)
     (ww-get-stylesheet))
 
- 
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; Classes for settings
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+  (define ww-settings%
+    (class object%
+      (super-new)
+      (define/public (set key value)
+        (error "ww-settings%: set not implemented, override in your specific subclass"))
+      (define/public (get key . default)
+        (error "ww-settings%: get not implemented, override in your specific subclass"))
+      (define/public (clone new-section)
+        (error "ww-settings%: clone not implemented, override in your specific subclass"))
+      (define/public (set! key value)
+        (send this set key value))
+      )
+    )
  
   ); end of module

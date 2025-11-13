@@ -57,3 +57,12 @@ td span.counter {
 	border: 1px solid grey;
 }
 
+.right {
+	float: right;
+}
+
+.right img.logo {
+	margin: 2em;
+	border: 2px solid grey;
+	max-width: 250px;
+}

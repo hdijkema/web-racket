@@ -3,6 +3,7 @@
 (require "../main.rkt"
          racket/runtime-path
          racket/gui
+         simple-ini/class
          )
 
 (provide
@@ -38,18 +39,35 @@
                         ))
 
 (define example-1-dialog%
-  (class ww-webview%
+  (class ww-webview-dialog%
+    (inherit-field settings)
     (super-new [html-file dialog-html]
                [width 400]
                [height 300])
 
     (define/override (html-loaded)
       (super html-loaded)
+
       (ww-debug "html-loaded for example-1-dialog%")
       (let* ((btn (send this element 'ok-btn)))
         (send btn connect 'click (λ (data)
-                                   (send this close)))))
-    ))
+                                   (send this close))))
+
+      (let* ((inp1 (send this element 'inp1))
+             (inp2 (send this element 'inp2))
+             (inp3 (send this element 'inp3)))
+        (send inp1 set! (send settings get 'inp1 "<input 1 not set yet>"))
+        (send inp2 set! (send settings get 'inp2 "<input 2 not set yet>"))
+        (send inp3 set! (send settings get 'inp3 "<input 3 not set yet>"))
+        (send inp1 on-change!
+              (λ (val)
+                (send settings set! 'inp1 val)))
+        (send inp2 on-change! (λ (val) (send settings set! 'inp2 val)))
+        (send inp3 on-change! (λ (val) (send settings set! 'inp3 val)))
+        )
+      )
+    )
+  )
 
 (define-syntax inc
   (syntax-rules ()
@@ -60,14 +78,18 @@
 
 (define example-1-window%
   (class ww-webview%
+
+    (inherit-field settings)
+    (super-new [html-file html-start]
+               )
+    
     (define go-on-counter #f)
     (define c-counter 0)
     (define counter-inc 1)
     (define counter-thread #f)
     (define div-counter #f)
-    (define my-dir ".")
-    
-    (super-new [html-file html-start])
+    (define my-dir (send settings get 'folder "."))
+
 
     (define/override (can-close?)
       (eq? counter-thread #f))
@@ -104,14 +126,6 @@
               (css-style '((color white) (background red) (font-size 120%) (font-weight bold)))))
       )
 
-    (define/public (set-folder new-dir)
-      (set! my-dir new-dir)
-      (let ((el (send this element 'folder)))
-        (send el set-inner-html! (format "Selected folder: <b>~a</b>" my-dir))
-        )
-      )
-      
-
     (define/public (start-counter)
       (set! counter-thread
             (thread
@@ -124,6 +138,22 @@
                  (set! go-on-counter #t)
                  (f)))))
       )
+
+    (define/public (set-folder new-dir)
+      (set! my-dir new-dir)
+      (send settings set 'folder new-dir)
+      (let ((el (send this element 'folder)))
+        (send el set-inner-html! (format "Selected folder: <b>~a</b>" my-dir))
+        )
+      )
+
+    (define/override (choose-dir)
+      (let ((new-dir (super choose-dir "Select a folder" my-dir)))
+        (unless (eq? new-dir #f)
+          (send this set-folder new-dir))))
+
+    (define/public (prefs)
+      (new example-1-dialog% [parent this] [settings (send this clone-settings 'example-1-dialog)]))
 
     (define/override (handle-navigate url type kind)
       (send this reset-counter)
@@ -140,10 +170,10 @@
       (ww-debug "CONNECTING BUTTONS")
       (let* ((dialog-btn (send this element 'dialog-button))
              (start-stop-btn (send this element 'start-stop-button))
+             (choose-dir-btn (send this element 'select-dir-button))
              )
         (send dialog-btn connect 'click
-              (λ (data)
-                (new example-1-dialog% [parent this])))
+              (λ (data) (send this prefs)))
         
         (send start-stop-btn connect 'click
               (λ (data)
@@ -157,6 +187,9 @@
                     )
                 )
               )
+        (send choose-dir-btn connect 'click
+              (λ (data)
+                (send this choose-dir)))
         )
       
       (ww-debug "SETTING MENU")
@@ -196,21 +229,24 @@
                 (λ () (send this reset-counter)))
 
           (send this connect-menu! 'm-prefs
-                (λ () (new example-1-dialog% [parent this])))
+                (λ () (send this prefs)))
 
           (send this connect-menu! 'm-select-dir
-                (λ ()
-                  (let ((new-dir (send this choose-dir "Select a folder" my-dir)))
-                    (unless (eq? new-dir #f)
-                      (send this set-folder new-dir)))))
+                (λ () (send this choose-dir)))
                                      
           )
         )
       )
 
     (begin
-      (displayln html-start)
+      (displayln "Yes this works!")
       )
     )
   )
     
+(define (run-example)
+  (let* ((ini (new ini% [file 'web-racket-example1]))
+         (settings (new ww-simple-ini% [ini ini] [section 'example-1-window]))
+         (window (new example-1-window% [settings settings]))
+         )
+    window))

@@ -43,7 +43,7 @@
 
            ww-set-menu
 
-           ww-set-html
+           ww-set-html-file
            ww-set-url
            
            ww-set-inner-html
@@ -98,8 +98,9 @@
           #f)))
 
   (define (as-string s)
-    (let ((s* (format "~a" s)))
-      (with-output-to-string (lambda () (write s*)))))
+    (format "~a" s))
+    ;(let ((s* (format "~a" s)))
+    ;  (with-output-to-string (lambda () (write s*)))))
 
   (define (ww-from-string s)
     (let ((s* (substring s 1 (- (string-length s) 1))))
@@ -814,12 +815,11 @@
     set-url ((win-id ww-win?)
              (url string?)) () -> void)
   
-  ;; Set html of window
-  (def-cmd ww-set-html
+  ;; Set html of window to file 
+  (def-cmd ww-set-html-file
     set-html ((win-id ww-win?)
               (html-file html-file-exists?)) ()
     -> number)
-
 
   ;; Set inner html of an Id of the HTML in the window
   (def-cmd ww-set-inner-html
