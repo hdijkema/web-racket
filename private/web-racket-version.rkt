@@ -33,7 +33,7 @@
   (define ww-version (mk-version ww-version-major ww-version-minor ww-version-patch))
 
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-  ;; Web Wire FFI Version
+  ;; Web Wire IPC Version
   ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
   
   (define ww-wire-version-major 0)
