@@ -5,6 +5,7 @@
           (for-label racket/base
                      racket/class
                      racket/gui/base
+		     net/sendurl
                      json
                      ;gregor
                      ;gregor/time
@@ -83,18 +84,16 @@ Enable or disable internal debug logging in the @racket[web-wire]
 layer. This affects @racket[ww-debug] output.
 }
 
-@defform[(ww-debug msg-expr) #:contracts ([msg-expr any/c])]
-@defform[(ww-debug id-expr msg-expr)
-         #:contracts ([id-expr any/c] [msg-expr any/c])]{
-
+@defform*[[(ww-debug msg-expr) #:contracts ([msg-expr any/c])
+           (ww-debug id-expr msg-expr) #:contracts ([id-expr any/c] [msg-expr any/c])
+         ]]{
 Debug logging macros that write to the shared log buffer when debug is
 enabled.
 }
 
-@defform[(ww-error msg-expr) #:contracts ([msg-expr any/c])]
-@defform[(ww-error id-expr msg-expr)
-         #:contracts ([id-expr any/c] [msg-expr any/c])]{
-
+@defform*[[(ww-error msg-expr) #:contracts ([msg-expr any/c])
+          (ww-error id-expr msg-expr) #:contracts ([id-expr any/c] [msg-expr any/c])
+         ]]{
 Error logging macros that always log, regardless of the debug setting.
 }
 

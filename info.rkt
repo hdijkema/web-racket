@@ -1,7 +1,7 @@
 #lang info
 
 (define pkg-authors '(hnmdijkema))
-(define version "0.1.8")
+(define version "0.1.9")
 (define license 'MIT)   
 (define collection "web-racket")
 (define pkg-desc "web-racket - A Web Based GUI library, based on webui-wire")
@@ -17,7 +17,9 @@
   )
 
 (define deps
-  '("racket/base" "http-easy" "gregor" "html-printer" "simple-ini" "gregor-utils"))
+  '("racket/base" "http-easy" "gregor" "html-printer" "simple-ini" "gregor-utils"
+    "racket/gui" "net/sendurl"
+    ))
 
 (define build-deps
   '("racket-doc"
