@@ -17,7 +17,7 @@
   )
 
 (define deps
-  '("racket/base" "net/http-easy" "gregor" "html-printer" "simple-ini"))
+  '("racket/base" "http-easy" "gregor" "html-printer" "simple-ini"))
 
 (define build-deps
   '("racket-doc"
