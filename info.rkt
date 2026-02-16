@@ -18,7 +18,7 @@
 
 (define deps
   '("racket/base" "http-easy" "gregor" "html-printer" "simple-ini" "gregor-utils"
-    "racket/gui" "net/sendurl"
+    "racket/gui" "net/sendurl" "gui-lib"
     ))
 
 (define build-deps
