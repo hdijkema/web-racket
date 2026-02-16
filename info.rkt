@@ -17,8 +17,8 @@
   )
 
 (define deps
-  '("racket/base" "http-easy" "gregor" "html-printer" "simple-ini" "gregor-utils"
-    "racket/gui" "net/sendurl" "gui-lib"
+  '("racket/base" "http-easy" "gregor" "gui-lib" "html-printer-lib" "net-lib" "simple-ini" "gregor-utils"
+    "racket/gui" 
     ))
 
 (define build-deps
@@ -26,4 +26,5 @@
     "draw-doc"
     "rackunit-lib"
     "scribble-lib"
+    "net-doc"
     ))
