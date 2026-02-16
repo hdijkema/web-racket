@@ -354,7 +354,7 @@ Important behaviour during construction:
 
 Key public methods (grouped by responsibility):
 
-@subsubsection{Settings and cloning}
+@bold{Settings and cloning}
 
 @defmethod[(clone-settings [section symbol?]) (or/c #f ww-settings%)]{
 
@@ -363,7 +363,7 @@ to obtain a section-specific settings object, otherwise return
 @racket[#f].
 }
 
-@subsubsection{Event handling hooks}
+@bold{Event handling hooks}
 
 These are normally invoked internally when events arrive from
 @tt{webui-wire}, but can be overridden in subclasses.
@@ -387,7 +387,7 @@ Handle navigation events (for example link clicks) as reported by
 @tt{webui-wire}.  The default implementation may call
 @racket[send-url] depending on @racket[type] and @racket[kind].}
 
-@subsubsection{Element management}
+@bold{Element management}
 
 @defmethod[(get-win-id) ww-win?]{
 Return the underlying @racket[ww-win] handle.}
@@ -426,7 +426,7 @@ Convenience: bind @racket['change] events for @tt{input} and
 @defmethod[(bind-buttons) void?]{
 Convenience: bind @racket['click] events for @tt{button} elements.}
 
-@subsubsection{Window geometry and title}
+@bold{Window geometry and title}
 
 @defmethod[(move [x number?] [y number?]) void?]{
 Move the window to (@racket[x], @racket[y]).}
@@ -448,7 +448,7 @@ Set the window title (cached locally and sent to the backend).}
 @defmethod[(get-title) string?]{
 Return the last title set.}
 
-@subsubsection{Show/hide and lifetime}
+@bold{Show/hide and lifetime}
 
 @defmethod[(show) void?]{
 Show the window (set show state to @racket['show]).}
@@ -481,7 +481,7 @@ Close the window, unregister it from the global tables, and if this is
 the last window, stop the backend by calling @racket[ww-stop].
 }
 
-@subsubsection{Menus}
+@bold{Menus}
 
 @defmethod[(set-menu! [menu-def is-menu?]) void?]{
 Set the window menu using a structure created with the helpers from
@@ -493,7 +493,7 @@ Associate a callback @racket[cb] with a menu item id. When the menu
 item is activated, the callback is called.
 }
 
-@subsubsection{HTML and navigation}
+@bold{HTML and navigation}
 
 @defmethod[(set-icon! [icn (or/c path? string?)]) void?]{
 Set the window icon; the file is validated by @racket[ww-set-icon].}
@@ -519,7 +519,7 @@ current HTML handle. The default implementation binds buttons and
 inputs by calling @racket[bind-buttons] and @racket[bind-inputs].
 }
 
-@subsubsection{File and directory dialogs}
+@bold{File and directory dialogs}
 
 @defmethod[(file-open [caption string?]
                       [base-dir string?]
@@ -549,7 +549,7 @@ Show a directory chooser dialog; return the chosen directory, or
 @racket[#f] on cancel/failure.
 }
 
-@subsubsection{Hook for subclasses}
+@bold{Hook for subclasses}
 
 @defmethod[(inherit-checks) boolean?]{
 
@@ -558,6 +558,9 @@ preconditions (for example: “dialog windows must have a parent”).
 The default implementation simply returns @racket[#t].
 }
 }
+
+
+
 
 @subsection{Dialog windows}
 
@@ -583,6 +586,8 @@ So, to create a dialog, always pass a parent window:
 ]
 }
 
+
+
 @subsection{Message dialogs}
 
 @defclass[ww-webview-message% ww-webview-dialog% ()]{
@@ -602,6 +607,8 @@ You can then obtain element wrappers for those ids via
 @racket[send] @racket[this] @racket[element] and update their inner
 HTML or text using the usual element methods.
 }
+
+
 
 @section{Settings abstraction}
 
@@ -638,4 +645,6 @@ shared base. Default implementation raises an error.
 Convenience that forwards to @racket[set]. Provided for symmetry with
 Racket’s @tt{set!} naming style.
 }
+
+
 }
