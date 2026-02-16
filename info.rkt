@@ -20,9 +20,9 @@
  '("racket/base" 
    "http-easy" 
    "gregor" 
-   "gui-lib" 
-   "html-printer-lib" 
-   "net-lib" 
+   "racket/gui" 
+   "html-printer" 
+   "racket/net" 
    "simple-ini" 
    "gregor-utils"
    )
