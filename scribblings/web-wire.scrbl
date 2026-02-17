@@ -94,12 +94,8 @@ does not change the remote log level of @tt{webui-wire}; for that, use
 @racket[ww-log-level].
 }
 
-@defform[(ww-debug msg-expr)
-         #:contracts ([msg-expr any/c])]
-
-@defform[(ww-debug id-expr msg-expr)
-         #:contracts ([id-expr any/c] [msg-expr any/c])]{
-
+@defform*[[(ww-debug msg-expr) #:contracts ([msg-expr any/c])
+           (ww-debug id-expr msg-expr) #:contracts ([id-expr any/c] [msg-expr any/c])]]{
 Debug logging macros used inside the module.
 
 When @racket[ww-set-debug] has been enabled, these macros:
@@ -112,12 +108,8 @@ When @racket[ww-set-debug] has been enabled, these macros:
 They are primarily intended for development and diagnostics.
 }
 
-@defform[(ww-error msg-expr)
-         #:contracts ([msg-expr any/c])]
-
-@defform[(ww-error id-expr msg-expr)
-         #:contracts ([id-expr any/c] [msg-expr any/c])]{
-
+@defform*[[(ww-error msg-expr) #:contracts ([msg-expr any/c])
+           (ww-error id-expr msg-expr) #:contracts ([id-expr any/c] [msg-expr any/c])]]{
 Error logging macros.
 
 These always log, regardless of the debug flag, and are used for
@@ -265,11 +257,6 @@ Opaque handle representing a WebUI window.
 
 The internal @racket[id] field corresponds to the numeric window id
 used by the @tt{webui-wire} backend.
-}
-
-@defproc[(ww-win-id [win ww-win?]) exact-integer?]{
-
-Accessor for the underlying numeric id of a @racket[ww-win] struct.
 }
 
 @defproc[(ww-new
