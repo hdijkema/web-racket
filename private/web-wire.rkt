@@ -899,7 +899,14 @@
   ;; get value of an element
   (def-cmd ww-get-value
     value ((win-id ww-win?)
-           (element-id symbol-or-string?)) () -> json)
+           (element-id symbol-or-string?)) () -> string
+    => (λ (val)
+         ; expect <element-id>:{ "result": <result: string> }
+         (let ((e-id (format "~a:" element-id)))
+           (unless (string=? (substring val 0 (string-length e-id)) e-id)
+             (error "Unexpected for ww-get-value, result does not start with requested id"))
+           (ww-from-json (substring val (string-length e-id)))))
+    )
 
   ;; set value of an element
   (def-cmd ww-set-value

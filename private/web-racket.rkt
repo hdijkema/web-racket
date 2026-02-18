@@ -191,6 +191,9 @@
       (define cb #f)
       (define val #f)
 
+      (define/public (value-converter v)
+        v)
+
       (define/public (get)
         val)
 
@@ -217,8 +220,10 @@
       (super-new)
 
       (begin
-        (inp-set! val (ww-get-value (send this get-win-id)
-                                    (send this get-id)))
+
+        (let ((v (ww-get-value (send this get-win-id) (send this get-id))))
+          (inp-set! val (send this value-converter v)))
+        
         (send this connect 'input (λ (data)
                                     (ww-debug "WW-INPUT% 'input event:" data)
                                     (let ((js-evt (hash-ref data 'js_evt #f)))
@@ -306,9 +311,9 @@
   (define ww-input-range%
     (class ww-input%
 
-      (define/override (get)
-        (let ((val (super get)))
-          val))
+      (define/override (value-converter v)
+        (string->number v))
+      
       (super-new)
       ))
 
