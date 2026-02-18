@@ -15,7 +15,14 @@
            )
   
   (provide ww-element%
+
            ww-input%
+           ww-input-email%
+           ww-input-date%
+           ww-input-time%
+           ww-input-datetime%
+           ww-input-range%
+           
            ww-webview%
            ww-webview-dialog%
            ww-settings%
