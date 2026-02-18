@@ -825,7 +825,7 @@
   (def-cmd ww-set-inner-html
     set-inner-html ((win-id ww-win?)
                     (element-id symbol-or-string?)
-                    (html-of-file html-or-file?)) () -> void)
+                    (html-of-file html-or-file?)) () -> number)
   
 
   ;; Het the inner html of an id of the HTML in the window
