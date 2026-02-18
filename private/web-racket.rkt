@@ -501,6 +501,13 @@
           )
         (hash-ref elements id))
 
+      (define/public (new-element id . cl-selector)
+        (unless (hash-has-key? elements id)
+          (let ((cl (if (null? cl-selector) ww-element% (car cl-selector))))
+            (let ((obj (new cl [win-id win-id] [id id])))
+              (hash-set! elements id obj))))
+        (hash-ref elements id))
+
       (define/public (get-elements selector)
         (ww-get-elements win-id selector))
 
