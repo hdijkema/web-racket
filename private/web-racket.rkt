@@ -362,6 +362,7 @@
                                     (when (and (number? html-handle) (number? page-handle) (= html-handle page-handle))
                                       (send this html-loaded))))
           ([eq? evt 'click] (handle-click (string->symbol (hash-ref content 'id)) content))
+          ([eq? evt 'dblclick] (handle-dblclick (string->symbol (hash-ref content 'id)) content))
           ([eq? evt 'input] (handle-input (string->symbol (hash-ref content 'id)) content))
           ([eq? evt 'change] (handle-change (string->symbol (hash-ref content 'id)) content))
           ([eq? evt 'resized] (let* ((width* (hash-ref content 'width))
@@ -409,8 +410,12 @@
       (define/public (handle-click element-id data)
         (let ((el (hash-ref elements element-id #f)))
           (unless (eq? el #f)
-            (ww-debug (format "CALLING CALLBACK FOR ~a" element-id))
             (send el callback 'click data))))
+
+      (define/public (handle-dblclick element-id data)
+        (let ((el (hash-ref elements element-id #f)))
+          (unless (eq? el #f)
+            (send el callback 'dblclick data))))
 
       (define/public (handle-change element-id data)
         (let ((el (hash-ref elements element-id #f)))
@@ -633,7 +638,7 @@
         )
 
       (define/public (inner-html-set handle oke)
-        (ww-debug (format "inner-html-set: ~a: ~a" handle oke))
+        (ww-debug (format "inner-html-set ~a: ~a" handle oke))
         )
 
       (define/public (inherit-checks)
