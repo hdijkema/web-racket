@@ -400,6 +400,9 @@
                                         (dir (hash-ref content 'dir))
                                         )
                                    (send this dir-choosen handle choosen dir)))
+          ([eq? evt 'inner-html-set] (let* ((handle (hash-ref content 'handle))
+                                            (has-been-set (hash-ref content 'oke)))
+                                       (send this inner-html-set handle has-been-set)))
           )
         )
 
@@ -627,6 +630,10 @@
 
       (define/public (dir-choosen handle choosen dir)
         (ww-debug (format "dir-choosen: handle=~a, choosen=~a, dir=~a" handle choosen dir))
+        )
+
+      (define/public (inner-html-set handle oke)
+        (ww-debug (format "inner-html-set: ~a: ~a" handle oke))
         )
 
       (define/public (inherit-checks)
