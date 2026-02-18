@@ -96,7 +96,7 @@
       (define connected-callbacks (make-hash))
 
       (define/public (callback evt . args)
-        (ww-debug (format "Callback for ~a - ~a - ~a" id evt args))
+        (ww-debug (format "WW-ELEMENT%: Callback for ~a - ~a - ~a" id evt args))
         (let ((cb (hash-ref connected-callbacks evt #f)))
           (unless (eq? cb #f)
             (with-handlers ([exn:fail?
@@ -428,6 +428,7 @@
              ([eq? type 'text] ww-input%)
              ([eq? type 'date] ww-input-date%)
              ([eq? type 'datetime-local] ww-input-datetime%)
+             ([eq? type 'range] ww-input-range%)
              (else ww-input%)))
           (else ww-element%)))
 
