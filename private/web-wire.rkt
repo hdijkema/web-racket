@@ -408,8 +408,8 @@
 
   (define (convert-result result)
     (let ((m (regexp-match re-generic-result result)))
-      (ww-debug result)
-      (ww-debug m)
+      (ww-debug (format "convert-result: ~a" result))
+      (ww-debug (format "match: ~a" m))
       (if m
           (let* ((ok (string=? (list-ref m 1) "OK"))
                  (kind (list-ref m 2))
