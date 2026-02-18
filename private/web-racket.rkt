@@ -363,6 +363,7 @@
                                       (send this html-loaded))))
           ([eq? evt 'click] (handle-click (string->symbol (hash-ref content 'id)) content))
           ([eq? evt 'dblclick] (handle-dblclick (string->symbol (hash-ref content 'id)) content))
+          ([eq? evt 'contextmenu] (handle-contextmenu (string->symbol (hash-ref content 'id)) content))
           ([eq? evt 'input] (handle-input (string->symbol (hash-ref content 'id)) content))
           ([eq? evt 'change] (handle-change (string->symbol (hash-ref content 'id)) content))
           ([eq? evt 'resized] (let* ((width* (hash-ref content 'width))
@@ -416,6 +417,11 @@
         (let ((el (hash-ref elements element-id #f)))
           (unless (eq? el #f)
             (send el callback 'dblclick data))))
+
+      (define/public (handle-contextmenu element-id data)
+        (let ((el (hash-ref elements element-id #f)))
+          (unless (eq? el #f)
+            (send el callback 'contextmenu data))))
 
       (define/public (handle-change element-id data)
         (let ((el (hash-ref elements element-id #f)))
