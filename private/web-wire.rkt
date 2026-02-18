@@ -899,7 +899,7 @@
   ;; get value of an element
   (def-cmd ww-get-value
     value ((win-id ww-win?)
-           (element-id symbol-or-string?)) () -> string)
+           (element-id symbol-or-string?)) () -> json)
 
   ;; set value of an element
   (def-cmd ww-set-value
