@@ -214,7 +214,7 @@
 
   (define (process-event h evt)
     (let* ((m (regexp-match re-event evt)))
-      (ww-debug evt)
+      (ww-debug (format "process-event: ~a" evt))
       (let* ((e (string->symbol (string-downcase (list-ref m 1))))
              (win-id (if (eq? (list-ref m 3) #f) #f (string->number (list-ref m 3))))
              (evt-handler (hash-ref windows-evt-handlers win-id #f))
@@ -224,7 +224,7 @@
                           (with-input-from-string (substring payload* 1) read-json)))
             )
         (if (eq? evt-handler #f)
-            (ww-error (format "no event handler to handle event ~a" evt))
+            (ww-error (format "process-event: no event handler to handle event ~a" evt))
             (queue-callback (lambda () (evt-handler e payload))))
         )
       )

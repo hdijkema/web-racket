@@ -149,6 +149,7 @@
 
     (define/override (choose-dir)
       (let ((new-dir (super choose-dir "Select a folder" my-dir)))
+        (displayln (format "choosen dir: ~a" new-dir))
         (unless (eq? new-dir #f)
           (send this set-folder new-dir))))
 
