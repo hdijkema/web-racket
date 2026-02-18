@@ -395,6 +395,11 @@
                                                                       'navigation-type)))
                                       )
                                 (send this handle-navigate url type kind)))
+          ([eq? evt 'choose-dir] (let* ((handle (hash-ref content 'handle))
+                                        (choosen (hash-ref content 'choosen))
+                                        (dir (hash-ref content 'dir))
+                                        )
+                                   (send this dir-choosen handle choosen dir)))
           )
         )
 
@@ -619,6 +624,10 @@
           (if (eq? r 'cmd-nok)
               #f
               r)))
+
+      (define/public (dir-choosen handle choosen dir)
+        (ww-debug (format "dir-choosen: handle=~a, choosen=~a, dir=~a" handle choosen dir))
+        )
 
       (define/public (inherit-checks)
         #t)
