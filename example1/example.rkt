@@ -18,20 +18,21 @@
 (define-runtime-path html-start "example-1.html")
 (define-runtime-path dialog-html "example-1-dialog.html")
 
-(define test-menu (menu (menu-item 'm-file "File"
+(define test-menu (menu 'main-menu
+                   (menu-item 'm-file "File"
                                    #:submenu
                                    (menu (menu-item 'm-open "Open File")
                                          (menu-item 'm-close "Close File")
                                          (menu-item 'm-select-dir "Select Folder" #:separator #t)
                                          (menu-item 'm-quit "Quit" #:separator #t)))
-                        (menu-item 'm-edit "Edit"
+                   (menu-item 'm-edit "Edit"
                                    #:submenu
                                    (menu (menu-item 'm-copy "Copy")
                                          (menu-item 'm-cut  "Cut")
                                          (menu-item 'm-paste "Paste")
                                          (menu-item 'm-prefs "Preferences" #:separator #t)
                                          ))
-                        (menu-item 'm-auto "Processes"
+                   (menu-item 'm-auto "Processes"
                                    #:submenu
                                    (menu (menu-item 'm-start "Start counter")
                                          (menu-item 'm-sub "Submenu"

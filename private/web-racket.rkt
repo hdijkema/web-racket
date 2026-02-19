@@ -608,7 +608,8 @@
         (hash-set! menu-cbs id cb))
 
       (define/public (disconnect-menu! id)
-        (hash-remove! menu-cbs id))
+        (hash-remove! menu-cbs id)
+        )
 
       (define/public (popup-menu menu-def x y)
         (ww-popup-menu win-id menu-def x y)
@@ -625,6 +626,8 @@
                              (send this connect-menu! id (λ ()
                                                            (clear-connections)
                                                            (cb))))))
+          (connect-menu! (ww-menu-id menu-def) (λ () (clear-connections)))
+          (set! ids (cons (ww-menu-id menu-def) ids))
           )
         )
 

@@ -21,7 +21,7 @@
     #:transparent)
   
   (define-struct ww-menu
-    ([items #:mutable])
+    (id [items #:mutable])
     #:transparent
     )
 
