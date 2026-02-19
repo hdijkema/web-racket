@@ -1,7 +1,7 @@
 #lang info
 
 (define pkg-authors '(hnmdijkema))
-(define version "0.2.18")
+(define version "0.2.19")
 (define license 'MIT)   
 (define collection "web-racket")
 (define pkg-desc "web-racket - A Web Based GUI library, based on webui-wire")

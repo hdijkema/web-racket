@@ -10,6 +10,8 @@
            menu-set-title!
            menu->json
            with-menu-item
+           menu-for-each
+           ww-menu-item-callback
            )
 
 
@@ -80,6 +82,21 @@
       (let ((h (make-hasheq)))
         (hash-set! h 'menu r)
         h)))
+
+  (define (menu-for-each menu cb)
+    (let ((items (ww-menu-items menu)))
+      (letrec ((f (λ (items)
+                    (if (null? items)
+                        #t
+                        (let ((item (car items)))
+                          (let ((submenu (ww-menu-item-submenu item)))
+                            (if (eq? submenu #f)
+                                (cb item)
+                                (menu-for-each submenu cb))))
+                        )
+                    )
+                  ))
+        (f items))))
 
   (define (menu->json menu)
     (let ((o (open-output-string)))

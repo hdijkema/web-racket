@@ -34,8 +34,16 @@
                         (menu-item 'm-auto "Processes"
                                    #:submenu
                                    (menu (menu-item 'm-start "Start counter")
+                                         (menu-item 'm-sub "Submenu"
+                                                    #:submenu
+                                                    (menu (menu-item 'm-sub1 "Submenu 1")
+                                                          (menu-item 'm-sub2 "Submenu 2")
+                                                          (menu-item 'm-sub3 "Submenu 3")
+                                                          )
+                                                    )
                                          (menu-item 'm-stop "Stop counter")
-                                         ))
+                                         )
+                                   )
                         ))
 
 (define example-1-dialog%

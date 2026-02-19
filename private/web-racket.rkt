@@ -609,6 +609,20 @@
 
       (define/public (popup-menu menu-def x y)
         (ww-popup-menu win-id menu-def x y)
+        (let* ((ids (list))
+               (clear-connections (λ ()
+                                   (for-each (λ (id)
+                                               (send this disconnect-menu! id))
+                                             ids))))
+          (menu-for-each menu-def
+                         (λ (item)
+                           (let ((cb (ww-menu-item-callback item))
+                                 (id (ww-menu-item-id item)))
+                             (set! ids (cons id ids))
+                             (send this connect-menu! id (λ ()
+                                                           (clear-connections)
+                                                           (cb))))))
+          )
         )
 
       ; files and directories
