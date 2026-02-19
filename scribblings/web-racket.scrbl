@@ -492,6 +492,12 @@ Associate a callback @racket[cb] with a menu item id. When the menu
 item is activated, the callback is called.
 }
 
+@defmethod[(popup-menu [menu-def is-menu?]) void?]{
+Pops up a contextmenu at the current cursor position.
+The menu is created using a structure created with the helpers from
+@racket["menu.rkt"].}
+
+
 @bold{HTML and navigation}
 
 @defmethod[(set-icon! [icn (or/c path? string?)]) void?]{

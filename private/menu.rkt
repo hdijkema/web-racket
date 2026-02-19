@@ -86,7 +86,6 @@
       (write-json (menu->hash menu) o)
       (get-output-string o)))
 
-
   (define (find-menu-item menu id)
     (let ((items (ww-menu-items menu)))
       (letrec ((f (λ (items)

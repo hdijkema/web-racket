@@ -42,6 +42,7 @@
            ww-set-icon
 
            ww-set-menu
+           ww-popup-menu
 
            ww-set-html-file
            ww-set-url
@@ -805,7 +806,12 @@
   (def-cmd ww-set-menu
     set-menu ((win-id ww-win?)
               (menu is-menu?)) [] -> void)
-  
+
+
+  ;; Popup a menu
+  (def-cmd ww-popup-menu
+    popup-menu ((win-id ww-win?)
+                (menu is-menu?)) [] -> void)
 
   (define (new-handle)
     #t)

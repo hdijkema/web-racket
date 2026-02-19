@@ -370,6 +370,24 @@ The @racket[menu] value is a menu structure as defined in
 @racket["menu.rkt"].
 }
 
+@defproc[(ww-popup-menu [win-id ww-win?]
+                        [menu is-menu?])
+         void?]{
+
+Pops up a (context) menu at the current cursor position:
+
+@racketblock[
+  (def-cmd ww-popup-menu
+    set-menu ((win-id ww-win?)
+              (menu is-menu?)) [] -> void)
+]
+
+The @racket[menu] value is a menu structure as defined in
+@racket["menu.rkt"].
+}
+
+
+
 @defproc[(ww-set-show-state [win-id ww-win?]
                             [state symbol?])
          void?]{

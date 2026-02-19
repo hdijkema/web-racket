@@ -12,6 +12,7 @@
            gregor-utils
            net/sendurl
            racket/path
+           xml
            )
   
   (provide ww-element%
@@ -605,6 +606,10 @@
 
       (define/public (connect-menu! id cb)
         (hash-set! menu-cbs id cb))
+
+      (define/public (popup-menu menu-def)
+        (ww-popup-menu win-id menu-def)
+        )
 
       ; files and directories
       (define/public (file-open caption base-dir filters)
