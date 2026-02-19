@@ -44,8 +44,12 @@
             #f)
         #f))
 
-  (define (menu id . items)
-    (make-ww-menu id items))
+  (define (menu . items)
+    (let ((menu-id #f))
+      (when (symbol? (car items))
+        (set! menu-id (car items))
+        (set! items (cdr items)))
+      (make-ww-menu menu-id items)))
 
   (define (menu-item id title
                      #:icon-file [icon-file #f]
