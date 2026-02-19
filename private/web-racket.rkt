@@ -607,6 +607,9 @@
       (define/public (connect-menu! id cb)
         (hash-set! menu-cbs id cb))
 
+      (define/public (disconnect-menu! id)
+        (hash-remove! menu-cbs id))
+
       (define/public (popup-menu menu-def x y)
         (ww-popup-menu win-id menu-def x y)
         (let* ((ids (list))
