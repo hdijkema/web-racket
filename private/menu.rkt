@@ -88,7 +88,7 @@
              )
         (let ((h (make-hasheq)))
           (hash-set! h 'menu r)
-          (hash-set! h 'menu-id (if fj (format "~a" (ww-menu-id menu)) (ww-menu-id menu)))
+          (hash-set! h 'id (if fj (format "~a" (ww-menu-id menu)) (ww-menu-id menu)))
           h))))
 
   (define (menu-for-each menu cb)
