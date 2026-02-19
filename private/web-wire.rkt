@@ -811,7 +811,10 @@
   ;; Popup a menu
   (def-cmd ww-popup-menu
     popup-menu ((win-id ww-win?)
-                (menu is-menu?)) [] -> void)
+                (menu is-menu?)
+                (x number?)
+                (y number?)
+                ) [] -> void)
 
   (define (new-handle)
     #t)
