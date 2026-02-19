@@ -44,8 +44,8 @@
             #f)
         #f))
 
-  (define (menu . items)
-    (make-ww-menu items))
+  (define (menu id . items)
+    (make-ww-menu id items))
 
   (define (menu-item id title
                      #:icon-file [icon-file #f]
